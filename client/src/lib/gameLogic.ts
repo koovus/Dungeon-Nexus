@@ -42,4 +42,5 @@ export interface GameStateSnapshot {
   messages: string[];
   depth: number;
   onlineCount: number;
+  observing?: boolean;
 }

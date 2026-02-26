@@ -3,6 +3,7 @@ import { MAP_WIDTH, MAP_HEIGHT } from '@/lib/gameLogic';
 import type { GameStateSnapshot } from '@/lib/gameLogic';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useGameWebSocket } from '@/hooks/useWebSocket';
+import { Eye, EyeOff } from 'lucide-react';
 
 function JoinScreen({ onJoin }: { onJoin: (name: string) => void }) {
   const [name, setName] = useState('');
@@ -72,11 +73,22 @@ function JoinScreen({ onJoin }: { onJoin: (name: string) => void }) {
   );
 }
 
-function GameView({ state, onMove }: { state: GameStateSnapshot; onMove: (dx: number, dy: number) => void }) {
+function GameView({
+  state,
+  onMove,
+  observing,
+  onToggleObserve
+}: {
+  state: GameStateSnapshot;
+  onMove: (dx: number, dy: number) => void;
+  observing: boolean;
+  onToggleObserve: () => void;
+}) {
   const logRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (observing) return;
       let dx = 0;
       let dy = 0;
 
@@ -94,7 +106,7 @@ function GameView({ state, onMove }: { state: GameStateSnapshot; onMove: (dx: nu
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onMove]);
+  }, [onMove, observing]);
 
   useEffect(() => {
     if (logRef.current) {
@@ -121,7 +133,7 @@ function GameView({ state, onMove }: { state: GameStateSnapshot; onMove: (dx: nu
         const isPlayer = state.player.pos.x === x && state.player.pos.y === y;
 
         if (isPlayer) {
-          rowChars.push(<span key={key} className="text-player">@</span>);
+          rowChars.push(<span key={key} className={observing ? "text-item" : "text-player"}>@</span>);
         } else if (otherPlayerMap.has(key)) {
           const op = otherPlayerMap.get(key)!;
           rowChars.push(<span key={key} className={op.color}>{op.char}</span>);
@@ -149,15 +161,40 @@ function GameView({ state, onMove }: { state: GameStateSnapshot; onMove: (dx: nu
     <div className="h-screen w-full bg-background text-primary crt flex flex-col crt-flicker">
       <div className="flex-1 flex flex-col p-4 max-w-7xl mx-auto w-full gap-3 relative z-10 min-h-0">
 
+        {/* Observe Mode Banner */}
+        {observing && (
+          <div className="bg-item/10 border border-item/40 px-4 py-2 text-item text-center text-sm uppercase tracking-widest shrink-0 flex items-center justify-center gap-2 animate-pulse">
+            <Eye className="w-4 h-4" />
+            Observing AI — {state.player.name}
+            <Eye className="w-4 h-4" />
+          </div>
+        )}
+
         <header className="border-b border-primary/50 pb-2 flex justify-between items-end font-bold uppercase tracking-wider shrink-0">
           <div className="flex gap-4 items-end">
-            <span className="text-player" data-testid="text-player-name">{state.player.name}</span>
+            <span className={observing ? "text-item" : "text-player"} data-testid="text-player-name">
+              {observing ? `[AI] ${state.player.name}` : state.player.name}
+            </span>
             <span className={state.player.hp <= 5 ? "text-enemy animate-pulse" : "text-primary"} data-testid="text-player-hp">
               HP: {state.player.hp}/{state.player.maxHp}
             </span>
           </div>
-          <div className="text-primary/50 text-sm" data-testid="text-depth-info">
-            Depth: {state.depth} | Online: {state.onlineCount}
+          <div className="flex items-center gap-4">
+            <button
+              data-testid="button-observe"
+              onClick={onToggleObserve}
+              className={`flex items-center gap-2 text-xs px-3 py-1 border uppercase tracking-widest transition-colors ${
+                observing
+                  ? 'border-item/50 text-item bg-item/10 hover:bg-item/20'
+                  : 'border-primary/50 text-primary/70 hover:bg-primary/10 hover:text-primary'
+              }`}
+            >
+              {observing ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+              {observing ? 'Stop Observing' : 'Observe AI'}
+            </button>
+            <div className="text-primary/50 text-sm" data-testid="text-depth-info">
+              Depth: {state.depth} | Online: {state.onlineCount}
+            </div>
           </div>
         </header>
 
@@ -177,7 +214,7 @@ function GameView({ state, onMove }: { state: GameStateSnapshot; onMove: (dx: nu
             </div>
 
             <div className="absolute bottom-2 right-2 text-xs opacity-40 uppercase tracking-widest z-30">
-              [WASD] move
+              {observing ? '[Observing]' : '[WASD] move'}
             </div>
           </div>
 
@@ -235,7 +272,7 @@ function GameView({ state, onMove }: { state: GameStateSnapshot; onMove: (dx: nu
 }
 
 export default function Home() {
-  const { gameState, connected, connect, sendMove } = useGameWebSocket();
+  const { gameState, connected, connect, sendMove, observing, toggleObserve } = useGameWebSocket();
   const [joined, setJoined] = useState(false);
 
   const handleJoin = useCallback((name: string) => {
@@ -262,5 +299,12 @@ export default function Home() {
     );
   }
 
-  return <GameView state={gameState} onMove={handleMove} />;
+  return (
+    <GameView
+      state={gameState}
+      onMove={handleMove}
+      observing={observing}
+      onToggleObserve={toggleObserve}
+    />
+  );
 }

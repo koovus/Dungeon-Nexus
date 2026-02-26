@@ -5,13 +5,11 @@ export function useGameWebSocket() {
   const wsRef = useRef<WebSocket | null>(null);
   const [gameState, setGameState] = useState<GameStateSnapshot | null>(null);
   const [connected, setConnected] = useState(false);
-  const [playerName, setPlayerName] = useState('');
+  const [observing, setObserving] = useState(false);
   const reconnectTimeout = useRef<ReturnType<typeof setTimeout>>();
 
   const connect = useCallback((name: string) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) return;
-
-    setPlayerName(name);
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
@@ -50,6 +48,14 @@ export function useGameWebSocket() {
     }
   }, []);
 
+  const toggleObserve = useCallback(() => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      const newVal = !observing;
+      setObserving(newVal);
+      wsRef.current.send(JSON.stringify({ type: 'observe', enabled: newVal }));
+    }
+  }, [observing]);
+
   useEffect(() => {
     return () => {
       if (reconnectTimeout.current) clearTimeout(reconnectTimeout.current);
@@ -57,5 +63,5 @@ export function useGameWebSocket() {
     };
   }, []);
 
-  return { gameState, connected, connect, sendMove };
+  return { gameState, connected, connect, sendMove, observing, toggleObserve };
 }
