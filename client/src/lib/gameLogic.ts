@@ -1,6 +1,6 @@
 import { EntityDefinition, defaultEnemyTypes, defaultItemTypes } from '@/components/GameSettings';
 
-export type EntityType = 'player' | 'enemy' | 'item' | 'other_player';
+export type EntityType = 'player' | 'enemy' | 'item' | 'other_player' | 'stairs_down';
 
 export interface Position {
   x: number;
@@ -36,6 +36,7 @@ export class GameState {
   player: Entity;
   entities: Entity[] = [];
   messages: string[] = [];
+  depth: number = 1;
   
   enemyDefs: EntityDefinition[];
   itemDefs: EntityDefinition[];
@@ -110,6 +111,16 @@ export class GameState {
       });
     }
 
+    // Stairs Down
+    this.entities.push({
+      id: `stairs_${this.depth}`,
+      type: 'stairs_down',
+      pos: this.getRandomEmptyPos(),
+      char: '>',
+      color: 'text-primary animate-pulse',
+      name: 'Stairs Down'
+    });
+
     // Enemies
     if (this.enemyDefs.length > 0) {
       for (let i = 0; i < 15; i++) {
@@ -181,6 +192,15 @@ export class GameState {
           this.entities = this.entities.filter(e => e.id !== entity.id);
           // Move onto the item
           this.player.pos = { x: newX, y: newY };
+        } else if (entity.type === 'stairs_down') {
+          this.log(`You descend to depth ${this.depth + 1}...`);
+          this.depth += 1;
+          this.generateMap();
+          this.player.pos = this.getRandomEmptyPos();
+          this.entities = [];
+          this.spawnEntities();
+          this.updateFOV();
+          return;
         } else if (entity.type === 'other_player') {
           this.log(`You bumped into ${entity.name}.`);
           return; // Can't walk over players

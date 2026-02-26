@@ -101,7 +101,7 @@ export default function Home() {
           </div>
           <div className="flex items-center gap-4">
             <div className="text-secondary/70 text-sm">
-              Depth: 1 | Online: 4
+              Depth: {game.depth} | Online: 4
             </div>
             <GameSettings onSettingsChange={handleSettingsChange} />
           </div>
