@@ -1,3 +1,5 @@
+import { EntityDefinition, defaultEnemyTypes, defaultItemTypes } from '@/components/GameSettings';
+
 export type EntityType = 'player' | 'enemy' | 'item' | 'other_player';
 
 export interface Position {
@@ -34,8 +36,14 @@ export class GameState {
   player: Entity;
   entities: Entity[] = [];
   messages: string[] = [];
+  
+  enemyDefs: EntityDefinition[];
+  itemDefs: EntityDefinition[];
 
-  constructor() {
+  constructor(enemyDefs = defaultEnemyTypes, itemDefs = defaultItemTypes) {
+    this.enemyDefs = enemyDefs;
+    this.itemDefs = itemDefs;
+    
     this.generateMap();
     this.player = {
       id: 'player',
@@ -103,45 +111,35 @@ export class GameState {
     }
 
     // Enemies
-    const enemyTypes = [
-      { char: 'g', name: 'Goblin', color: 'text-enemy' },
-      { char: 'o', name: 'Orc', color: 'text-enemy' },
-      { char: 'T', name: 'Troll', color: 'text-enemy' },
-      { char: 'D', name: 'Dragon', color: 'text-enemy' }
-    ];
-
-    for (let i = 0; i < 15; i++) {
-      const type = enemyTypes[Math.floor(Math.random() * enemyTypes.length)];
-      this.entities.push({
-        id: `e_${i}`,
-        type: 'enemy',
-        pos: this.getRandomEmptyPos(),
-        char: type.char,
-        color: type.color,
-        name: type.name,
-        hp: 10,
-        maxHp: 10
-      });
+    if (this.enemyDefs.length > 0) {
+      for (let i = 0; i < 15; i++) {
+        const type = this.enemyDefs[Math.floor(Math.random() * this.enemyDefs.length)];
+        this.entities.push({
+          id: `e_${i}`,
+          type: 'enemy',
+          pos: this.getRandomEmptyPos(),
+          char: type.char,
+          color: type.color,
+          name: type.name,
+          hp: 10,
+          maxHp: 10
+        });
+      }
     }
 
     // Items
-    const itemTypes = [
-      { char: '!', name: 'Health Potion', color: 'text-item' },
-      { char: '?', name: 'Magic Scroll', color: 'text-item' },
-      { char: '$', name: 'Gold', color: 'text-player' },
-      { char: ')', name: 'Sword', color: 'text-secondary' }
-    ];
-
-    for (let i = 0; i < 20; i++) {
-      const type = itemTypes[Math.floor(Math.random() * itemTypes.length)];
-      this.entities.push({
-        id: `i_${i}`,
-        type: 'item',
-        pos: this.getRandomEmptyPos(),
-        char: type.char,
-        color: type.color,
-        name: type.name
-      });
+    if (this.itemDefs.length > 0) {
+      for (let i = 0; i < 20; i++) {
+        const type = this.itemDefs[Math.floor(Math.random() * this.itemDefs.length)];
+        this.entities.push({
+          id: `i_${i}`,
+          type: 'item',
+          pos: this.getRandomEmptyPos(),
+          char: type.char,
+          color: type.color,
+          name: type.name
+        });
+      }
     }
   }
 
@@ -259,4 +257,4 @@ export class GameState {
   }
 }
 
-export const createGame = () => new GameState();
+export const createGame = (enemies = defaultEnemyTypes, items = defaultItemTypes) => new GameState(enemies, items);

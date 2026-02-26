@@ -1,11 +1,17 @@
 import { useEffect, useState, useRef, useMemo } from 'react';
 import { createGame, GameState, MAP_WIDTH, MAP_HEIGHT } from '@/lib/gameLogic';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { GameSettings, EntityDefinition } from '@/components/GameSettings';
 
 export default function Home() {
   const [game, setGame] = useState<GameState>(() => createGame());
   const [tick, setTick] = useState(0); // For forcing re-renders
   const logRef = useRef<HTMLDivElement>(null);
+
+  const handleSettingsChange = (enemies: EntityDefinition[], items: EntityDefinition[]) => {
+    setGame(createGame(enemies, items));
+    setTick(t => t + 1);
+  };
 
   // Handle keyboard input
   useEffect(() => {
@@ -93,8 +99,11 @@ export default function Home() {
               HP: {game.player.hp}/{game.player.maxHp}
             </span>
           </div>
-          <div className="text-secondary/70 text-sm">
-            Depth: 1 | Online: 4
+          <div className="flex items-center gap-4">
+            <div className="text-secondary/70 text-sm">
+              Depth: 1 | Online: 4
+            </div>
+            <GameSettings onSettingsChange={handleSettingsChange} />
           </div>
         </header>
 
