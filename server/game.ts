@@ -212,6 +212,57 @@ export class DungeonLevel {
     }
     return { x: 1, y: 1 };
   }
+
+  getCentralEmptyPos(): Position {
+    const cx = Math.floor(MAP_WIDTH / 2);
+    const cy = Math.floor(MAP_HEIGHT / 2);
+
+    for (let radius = 0; radius < Math.max(MAP_WIDTH, MAP_HEIGHT); radius++) {
+      for (let dy = -radius; dy <= radius; dy++) {
+        for (let dx = -radius; dx <= radius; dx++) {
+          if (Math.abs(dx) !== radius && Math.abs(dy) !== radius) continue;
+          const x = cx + dx;
+          const y = cy + dy;
+          if (x >= 0 && x < MAP_WIDTH && y >= 0 && y < MAP_HEIGHT) {
+            if (this.map[y][x].walkable && !this.map[y][x].isStairs) {
+              const occupied = this.entities.some(e => e.pos.x === x && e.pos.y === y);
+              if (!occupied) return { x, y };
+            }
+          }
+        }
+      }
+    }
+    return this.getRandomEmptyPos();
+  }
+
+  countOpenNeighbors(pos: Position): number {
+    let count = 0;
+    const dirs = [[-1,0],[1,0],[0,-1],[0,1],[-1,-1],[-1,1],[1,-1],[1,1]];
+    for (const [dx, dy] of dirs) {
+      const nx = pos.x + dx;
+      const ny = pos.y + dy;
+      if (nx >= 0 && nx < MAP_WIDTH && ny >= 0 && ny < MAP_HEIGHT && this.map[ny][nx].walkable) {
+        count++;
+      }
+    }
+    return count;
+  }
+
+  getOpenEmptyPos(): Position {
+    let best: Position | null = null;
+    let bestOpen = 0;
+
+    for (let i = 0; i < 200; i++) {
+      const pos = this.getRandomEmptyPos();
+      const open = this.countOpenNeighbors(pos);
+      if (open > bestOpen) {
+        bestOpen = open;
+        best = pos;
+      }
+      if (open >= 6) return pos;
+    }
+    return best || this.getCentralEmptyPos();
+  }
 }
 
 export class GameWorld {
@@ -233,10 +284,10 @@ export class GameWorld {
     return this.levels.get(depth)!;
   }
 
-  addPlayer(id: string, name: string): PlayerState {
+  addPlayer(id: string, name: string, useOpenSpawn = false): PlayerState {
     const depth = 1;
     const level = this.getOrCreateLevel(depth);
-    const pos = level.getRandomEmptyPos();
+    const pos = useOpenSpawn ? level.getOpenEmptyPos() : level.getRandomEmptyPos();
 
     const explored: boolean[][] = [];
     for (let y = 0; y < MAP_HEIGHT; y++) {
