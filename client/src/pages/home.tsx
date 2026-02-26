@@ -4,7 +4,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 
 export default function Home() {
   const [game, setGame] = useState<GameState>(() => createGame());
-  const [, setTick] = useState(0); // For forcing re-renders
+  const [tick, setTick] = useState(0); // For forcing re-renders
   const logRef = useRef<HTMLDivElement>(null);
 
   // Handle keyboard input
@@ -48,7 +48,7 @@ export default function Home() {
     if (logRef.current) {
       logRef.current.scrollTop = logRef.current.scrollHeight;
     }
-  }, [game.messages.length]);
+  }, [game.messages.length, tick]);
 
   // Create text representation of the map
   const renderMap = () => {
@@ -149,7 +149,7 @@ export default function Home() {
             </div>
 
             {/* Message Log */}
-            <div className="border border-primary/30 p-3 flex-1 flex flex-col bg-background/50 backdrop-blur-sm relative">
+            <div className="border border-primary/30 p-3 flex-1 flex flex-col bg-background/50 backdrop-blur-sm relative min-h-0">
               <h3 className="uppercase text-xs tracking-widest text-primary/70 mb-2 border-b border-primary/30 pb-1">System Log</h3>
               
               <div 
