@@ -1,0 +1,61 @@
+import { useEffect, useRef, useState, useCallback } from 'react';
+import type { GameStateSnapshot } from '@/lib/gameLogic';
+
+export function useGameWebSocket() {
+  const wsRef = useRef<WebSocket | null>(null);
+  const [gameState, setGameState] = useState<GameStateSnapshot | null>(null);
+  const [connected, setConnected] = useState(false);
+  const [playerName, setPlayerName] = useState('');
+  const reconnectTimeout = useRef<ReturnType<typeof setTimeout>>();
+
+  const connect = useCallback((name: string) => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) return;
+
+    setPlayerName(name);
+
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
+    wsRef.current = ws;
+
+    ws.onopen = () => {
+      setConnected(true);
+      ws.send(JSON.stringify({ type: 'join', name }));
+    };
+
+    ws.onmessage = (event) => {
+      try {
+        const msg = JSON.parse(event.data);
+        if (msg.type === 'state') {
+          setGameState(msg.data);
+        }
+      } catch {}
+    };
+
+    ws.onclose = () => {
+      setConnected(false);
+      wsRef.current = null;
+      reconnectTimeout.current = setTimeout(() => {
+        if (name) connect(name);
+      }, 2000);
+    };
+
+    ws.onerror = () => {
+      ws.close();
+    };
+  }, []);
+
+  const sendMove = useCallback((dx: number, dy: number) => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: 'move', dx, dy }));
+    }
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (reconnectTimeout.current) clearTimeout(reconnectTimeout.current);
+      wsRef.current?.close();
+    };
+  }, []);
+
+  return { gameState, connected, connect, sendMove };
+}

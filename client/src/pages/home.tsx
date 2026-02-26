@@ -1,85 +1,140 @@
-import { useEffect, useState, useRef, useMemo } from 'react';
-import { createGame, GameState, MAP_WIDTH, MAP_HEIGHT } from '@/lib/gameLogic';
+import { useEffect, useState, useRef, useCallback } from 'react';
+import { MAP_WIDTH, MAP_HEIGHT } from '@/lib/gameLogic';
+import type { GameStateSnapshot } from '@/lib/gameLogic';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { GameSettings, EntityDefinition } from '@/components/GameSettings';
+import { useGameWebSocket } from '@/hooks/useWebSocket';
 
-export default function Home() {
-  const [game, setGame] = useState<GameState>(() => createGame());
-  const [tick, setTick] = useState(0); // For forcing re-renders
-  const logRef = useRef<HTMLDivElement>(null);
+function JoinScreen({ onJoin }: { onJoin: (name: string) => void }) {
+  const [name, setName] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
 
-  const handleSettingsChange = (enemies: EntityDefinition[], items: EntityDefinition[]) => {
-    setGame(createGame(enemies, items));
-    setTick(t => t + 1);
+  useEffect(() => {
+    inputRef.current?.focus();
+  }, []);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const finalName = name.trim() || `Adventurer_${Math.floor(Math.random() * 1000)}`;
+    onJoin(finalName);
   };
 
-  // Handle keyboard input
+  return (
+    <div className="min-h-screen w-full bg-background text-primary crt flex flex-col items-center justify-center crt-flicker font-mono">
+      <div className="relative z-10 border border-primary/50 p-8 max-w-lg w-full mx-4" style={{ textShadow: '0 0 5px currentColor' }}>
+        <pre className="text-primary text-xs mb-6 text-center leading-tight select-none">
+{`
+ ██████╗ ██╗   ██╗███╗   ██╗ ██████╗ ███████╗ ██████╗ ███╗   ██╗
+ ██╔══██╗██║   ██║████╗  ██║██╔════╝ ██╔════╝██╔═══██╗████╗  ██║
+ ██║  ██║██║   ██║██╔██╗ ██║██║  ███╗█████╗  ██║   ██║██╔██╗ ██║
+ ██║  ██║██║   ██║██║╚██╗██║██║   ██║██╔══╝  ██║   ██║██║╚██╗██║
+ ██████╔╝╚██████╔╝██║ ╚████║╚██████╔╝███████╗╚██████╔╝██║ ╚████║
+ ╚═════╝  ╚═════╝ ╚═╝  ╚═══╝ ╚═════╝ ╚══════╝ ╚═════╝ ╚═╝  ╚═══╝
+                       M U D
+`}
+        </pre>
+
+        <div className="space-y-4 text-sm text-primary/70 mb-6">
+          <p className="text-center">A multiplayer roguelike dungeon crawler</p>
+          <div className="grid grid-cols-2 gap-2 text-xs border border-primary/20 p-3">
+            <div><span className="text-player font-bold">@</span> You</div>
+            <div><span className="text-secondary font-bold">@</span> Other Players</div>
+            <div><span className="text-enemy font-bold">g o T D</span> Monsters</div>
+            <div><span className="text-item font-bold">! ? $ )</span> Items</div>
+            <div><span className="text-primary font-bold">&gt;</span> Stairs Down</div>
+            <div><span className="text-wall font-bold">#</span> Walls</div>
+          </div>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="text-xs text-primary/70 uppercase tracking-widest block mb-1">Enter thy name</label>
+            <input
+              ref={inputRef}
+              data-testid="input-player-name"
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Anonymous Adventurer"
+              maxLength={20}
+              className="w-full bg-transparent border border-primary/50 px-3 py-2 text-primary font-mono focus:outline-none focus:border-primary placeholder:text-primary/30"
+            />
+          </div>
+          <button
+            data-testid="button-join"
+            type="submit"
+            className="w-full bg-primary/20 border border-primary/50 px-4 py-2 text-primary uppercase tracking-widest hover:bg-primary/30 transition-colors"
+          >
+            Enter the Dungeon
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function GameView({ state, onMove }: { state: GameStateSnapshot; onMove: (dx: number, dy: number) => void }) {
+  const logRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       let dx = 0;
       let dy = 0;
 
       switch (e.key) {
-        case 'ArrowUp':
-        case 'w':
-          dy = -1;
-          break;
-        case 'ArrowDown':
-        case 's':
-          dy = 1;
-          break;
-        case 'ArrowLeft':
-        case 'a':
-          dx = -1;
-          break;
-        case 'ArrowRight':
-        case 'd':
-          dx = 1;
-          break;
-        default:
-          return;
+        case 'ArrowUp': case 'w': dy = -1; break;
+        case 'ArrowDown': case 's': dy = 1; break;
+        case 'ArrowLeft': case 'a': dx = -1; break;
+        case 'ArrowRight': case 'd': dx = 1; break;
+        default: return;
       }
 
       e.preventDefault();
-      game.movePlayer(dx, dy);
-      setTick(t => t + 1);
+      onMove(dx, dy);
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [game]);
+  }, [onMove]);
 
-  // Scroll log to bottom
   useEffect(() => {
     if (logRef.current) {
       logRef.current.scrollTop = logRef.current.scrollHeight;
     }
-  }, [game.messages.length, tick]);
+  }, [state.messages.length]);
 
-  // Create text representation of the map
+  const entityMap = new Map<string, typeof state.entities[0]>();
+  for (const e of state.entities) {
+    entityMap.set(`${e.pos.x},${e.pos.y}`, e);
+  }
+  const otherPlayerMap = new Map<string, typeof state.otherPlayers[0]>();
+  for (const p of state.otherPlayers) {
+    if (p.visible) otherPlayerMap.set(`${p.pos.x},${p.pos.y}`, p);
+  }
+
   const renderMap = () => {
-    let rows = [];
+    const rows = [];
     for (let y = 0; y < MAP_HEIGHT; y++) {
-      let rowChars = [];
+      const rowChars = [];
       for (let x = 0; x < MAP_WIDTH; x++) {
-        const tile = game.map[y][x];
-        
-        // Render entity if visible
-        let entity = null;
-        if (tile.visible) {
-          entity = game.entities.find(e => e.pos.x === x && e.pos.y === y);
-        }
-        
-        if (game.player.pos.x === x && game.player.pos.y === y) {
-          rowChars.push(<span key={`${x}-${y}`} className={game.player.color}>{game.player.char}</span>);
-        } else if (entity) {
-          rowChars.push(<span key={`${x}-${y}`} className={entity.color}>{entity.char}</span>);
+        const tile = state.map[y][x];
+        const key = `${x},${y}`;
+        const isPlayer = state.player.pos.x === x && state.player.pos.y === y;
+
+        if (isPlayer) {
+          rowChars.push(<span key={key} className="text-player">@</span>);
+        } else if (otherPlayerMap.has(key)) {
+          const op = otherPlayerMap.get(key)!;
+          rowChars.push(<span key={key} className={op.color}>{op.char}</span>);
+        } else if (entityMap.has(key) && tile.visible) {
+          const e = entityMap.get(key)!;
+          rowChars.push(<span key={key} className={e.color}>{e.char}</span>);
         } else if (tile.visible) {
-          rowChars.push(<span key={`${x}-${y}`} className={tile.color}>{tile.char}</span>);
+          const color = tile.walkable ? 'text-primary/30' : 'text-wall';
+          rowChars.push(<span key={key} className={color}>{tile.char}</span>);
         } else if (tile.explored) {
-          rowChars.push(<span key={`${x}-${y}`} className="text-primary/10">{tile.char}</span>);
+          rowChars.push(<span key={key} className="text-primary/10">{tile.char}</span>);
         } else {
-          rowChars.push(<span key={`${x}-${y}`} className="text-transparent"> </span>);
+          rowChars.push(<span key={key} className="text-transparent"> </span>);
         }
       }
       rows.push(<div key={y} className="leading-none whitespace-pre flex">{rowChars}</div>);
@@ -87,98 +142,89 @@ export default function Home() {
     return rows;
   };
 
+  const visibleEntities = state.entities.filter(e => e.type !== 'stairs_down');
+  const visibleOthers = state.otherPlayers.filter(p => p.visible);
+
   return (
-    <div className="min-h-screen w-full bg-background text-primary crt flex flex-col crt-flicker">
-      <div className="flex-1 flex flex-col p-4 max-w-7xl mx-auto w-full gap-4 relative z-10">
-        
-        {/* Header / Stats */}
-        <header className="border-b border-primary/50 pb-2 flex justify-between items-end font-bold uppercase tracking-wider">
-          <div>
-            <span className="text-player mr-4">{game.player.name}</span>
-            <span className={game.player.hp! <= 5 ? "text-enemy animate-pulse" : "text-primary"}>
-              HP: {game.player.hp}/{game.player.maxHp}
+    <div className="h-screen w-full bg-background text-primary crt flex flex-col crt-flicker">
+      <div className="flex-1 flex flex-col p-4 max-w-7xl mx-auto w-full gap-3 relative z-10 min-h-0">
+
+        <header className="border-b border-primary/50 pb-2 flex justify-between items-end font-bold uppercase tracking-wider shrink-0">
+          <div className="flex gap-4 items-end">
+            <span className="text-player" data-testid="text-player-name">{state.player.name}</span>
+            <span className={state.player.hp <= 5 ? "text-enemy animate-pulse" : "text-primary"} data-testid="text-player-hp">
+              HP: {state.player.hp}/{state.player.maxHp}
             </span>
           </div>
-          <div className="flex items-center gap-4">
-            <div className="text-secondary/70 text-sm">
-              Depth: {game.depth} | Online: 4
-            </div>
-            <GameSettings onSettingsChange={handleSettingsChange} />
+          <div className="text-primary/50 text-sm" data-testid="text-depth-info">
+            Depth: {state.depth} | Online: {state.onlineCount}
           </div>
         </header>
 
-        {/* Main Game Area */}
         <div className="flex-1 flex gap-4 min-h-0 overflow-hidden">
-          
-          {/* Map Display */}
-          <div className="flex-1 border border-primary/30 p-4 bg-background overflow-hidden relative group">
-            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-primary/5 via-background to-background pointer-events-none"></div>
-            
+
+          <div className="flex-1 border border-primary/30 p-4 bg-background overflow-hidden relative">
+            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_40%,rgba(0,0,0,0.4)_100%)] pointer-events-none z-20"></div>
+
             <div className="h-full w-full flex items-center justify-center">
-              <div 
+              <div
                 className="font-mono text-sm tracking-widest relative z-10 transform-gpu"
-                style={{ 
-                  textShadow: '0 0 5px currentColor',
-                }}
+                style={{ textShadow: '0 0 5px currentColor' }}
+                data-testid="game-map"
               >
                 {renderMap()}
               </div>
             </div>
-            
-            <div className="absolute bottom-2 right-2 text-xs opacity-50 uppercase tracking-widest">
-              [WASD] to move
+
+            <div className="absolute bottom-2 right-2 text-xs opacity-40 uppercase tracking-widest z-30">
+              [WASD] move
             </div>
           </div>
 
-          {/* Side Panel: Logs & Entities */}
-          <div className="w-80 flex flex-col gap-4 border-l border-primary/30 pl-4">
-            
-            {/* Nearby Players */}
-            <div className="border border-primary/30 p-3 h-1/3 flex flex-col">
-              <h3 className="uppercase text-xs tracking-widest text-primary/70 mb-2 border-b border-primary/30 pb-1">Nearby Entities</h3>
+          <div className="w-72 flex flex-col gap-3 min-h-0">
+
+            <div className="border border-primary/30 p-3 shrink-0 max-h-48 flex flex-col">
+              <h3 className="uppercase text-xs tracking-widest text-primary/70 mb-2 border-b border-primary/30 pb-1 shrink-0">Nearby</h3>
               <ScrollArea className="flex-1">
                 <div className="space-y-1">
-                  {game.entities.filter(e => {
-                     // Only show visible entities
-                     return game.map[e.pos.y][e.pos.x].visible;
-                  }).map(e => (
+                  {visibleOthers.map((p, i) => (
+                    <div key={i} className="text-sm flex items-center gap-2">
+                      <span className={`${p.color} font-bold`}>{p.char}</span>
+                      <span className="opacity-80">{p.name}</span>
+                    </div>
+                  ))}
+                  {visibleEntities.map(e => (
                     <div key={e.id} className="text-sm flex items-center gap-2">
                       <span className={`${e.color} font-bold`}>{e.char}</span>
                       <span className="opacity-80">{e.name}</span>
                       {e.hp !== undefined && (
-                        <span className="ml-auto text-xs opacity-50">[{e.hp} HP]</span>
+                        <span className="ml-auto text-xs opacity-50">[{e.hp}hp]</span>
                       )}
                     </div>
                   ))}
-                  {game.entities.filter(e => game.map[e.pos.y][e.pos.x].visible).length === 0 && (
-                     <div className="text-xs opacity-50 italic">Nothing nearby.</div>
+                  {visibleEntities.length === 0 && visibleOthers.length === 0 && (
+                    <div className="text-xs opacity-50 italic">Nothing nearby.</div>
                   )}
                 </div>
               </ScrollArea>
             </div>
 
-            {/* Message Log */}
-            <div className="border border-primary/30 p-3 flex-1 flex flex-col bg-background/50 backdrop-blur-sm relative min-h-0">
-              <h3 className="uppercase text-xs tracking-widest text-primary/70 mb-2 border-b border-primary/30 pb-1">System Log</h3>
-              
-              <div 
+            <div className="border border-primary/30 p-3 flex-1 flex flex-col min-h-0 relative">
+              <h3 className="uppercase text-xs tracking-widest text-primary/70 mb-2 border-b border-primary/30 pb-1 shrink-0">System Log</h3>
+              <div
                 ref={logRef}
-                className="flex-1 overflow-y-auto font-mono text-sm space-y-1 pr-2"
+                className="flex-1 overflow-y-auto font-mono text-sm space-y-0.5 pr-2 min-h-0"
               >
-                {game.messages.map((msg, i) => (
-                  <div 
-                    key={i} 
-                    className={`opacity-${Math.max(20, 100 - (game.messages.length - 1 - i) * 10)} ${
-                      i === game.messages.length - 1 ? 'text-secondary' : 'text-primary'
-                    }`}
+                {state.messages.map((msg, i) => (
+                  <div
+                    key={i}
+                    className={i === state.messages.length - 1 ? 'text-secondary' : 'text-primary/70'}
                   >
-                    <span className="opacity-50 mr-2">&gt;</span>{msg}
+                    <span className="opacity-40 mr-1">&gt;</span>{msg}
                   </div>
                 ))}
               </div>
-              
-              {/* Scanline overlay for log */}
-              <div className="absolute inset-0 bg-[linear-gradient(transparent_50%,rgba(0,0,0,0.25)_50%)] bg-[length:100%_4px] pointer-events-none opacity-20" />
+              <div className="absolute inset-0 bg-[linear-gradient(transparent_50%,rgba(0,0,0,0.15)_50%)] bg-[length:100%_4px] pointer-events-none opacity-20 rounded" />
             </div>
 
           </div>
@@ -186,4 +232,35 @@ export default function Home() {
       </div>
     </div>
   );
+}
+
+export default function Home() {
+  const { gameState, connected, connect, sendMove } = useGameWebSocket();
+  const [joined, setJoined] = useState(false);
+
+  const handleJoin = useCallback((name: string) => {
+    connect(name);
+    setJoined(true);
+  }, [connect]);
+
+  const handleMove = useCallback((dx: number, dy: number) => {
+    sendMove(dx, dy);
+  }, [sendMove]);
+
+  if (!joined) {
+    return <JoinScreen onJoin={handleJoin} />;
+  }
+
+  if (!gameState) {
+    return (
+      <div className="min-h-screen bg-background text-primary font-mono flex items-center justify-center crt crt-flicker">
+        <div className="text-center relative z-10" style={{ textShadow: '0 0 5px currentColor' }}>
+          <div className="animate-pulse text-xl uppercase tracking-widest">Connecting to server...</div>
+          {!connected && <div className="text-sm text-primary/50 mt-2">Establishing link</div>}
+        </div>
+      </div>
+    );
+  }
+
+  return <GameView state={gameState} onMove={handleMove} />;
 }
