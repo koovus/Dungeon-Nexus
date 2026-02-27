@@ -24,6 +24,16 @@ export interface Tile {
   isStairs?: boolean;
 }
 
+export interface PlayerStats {
+  kills: number;
+  damageDealt: number;
+  damageTaken: number;
+  itemsCollected: number;
+  stepsWalked: number;
+  deepestDepth: number;
+  killedBy: string;
+}
+
 export interface PlayerState {
   id: string;
   name: string;
@@ -31,6 +41,8 @@ export interface PlayerState {
   hp: number;
   maxHp: number;
   explored: boolean[][];
+  stats: PlayerStats;
+  dead: boolean;
 }
 
 export interface EnemyDef {
@@ -300,7 +312,17 @@ export class GameWorld {
       pos,
       hp: 20,
       maxHp: 20,
-      explored
+      explored,
+      dead: false,
+      stats: {
+        kills: 0,
+        damageDealt: 0,
+        damageTaken: 0,
+        itemsCollected: 0,
+        stepsWalked: 0,
+        deepestDepth: 1,
+        killedBy: ''
+      }
     };
 
     this.players.set(id, player);
@@ -316,6 +338,38 @@ export class GameWorld {
     log(`Player ${name} (${id}) joined at depth ${depth}`, "game");
 
     return player;
+  }
+
+  respawnPlayer(id: string) {
+    const player = this.players.get(id);
+    if (!player) return;
+
+    player.dead = false;
+    player.hp = player.maxHp;
+    player.stats = {
+      kills: 0,
+      damageDealt: 0,
+      damageTaken: 0,
+      itemsCollected: 0,
+      stepsWalked: 0,
+      deepestDepth: 1,
+      killedBy: ''
+    };
+
+    const depth = 1;
+    this.playerDepths.set(id, depth);
+    const level = this.getOrCreateLevel(depth);
+    player.pos = level.getRandomEmptyPos();
+    player.explored = [];
+    for (let y = 0; y < MAP_HEIGHT; y++) {
+      player.explored.push(new Array(MAP_WIDTH).fill(false));
+    }
+    this.messageLog.set(id, [
+      "You awaken at the dungeon entrance...",
+      "A new journey begins."
+    ]);
+    this.updatePlayerFOV(id);
+    log(`Player ${player.name} (${id}) respawned`, "game");
   }
 
   removePlayer(id: string) {
@@ -359,6 +413,8 @@ export class GameWorld {
     const tile = level.map[newY][newX];
     if (!tile.walkable) return false;
 
+    if (player.dead) return false;
+
     const otherPlayer = Array.from(this.players.entries()).find(
       ([pid, p]) => pid !== id && this.playerDepths.get(pid) === depth && p.pos.x === newX && p.pos.y === newY
     );
@@ -374,35 +430,31 @@ export class GameWorld {
       if (entity.type === 'enemy') {
         const dmg = Math.floor(Math.random() * 5) + 1 + Math.floor(depth * 0.5);
         entity.hp! -= dmg;
+        player.stats.damageDealt += dmg;
         this.addMessage(id, `You hit the ${entity.name} for ${dmg} damage!`);
 
         if (entity.hp! <= 0) {
           this.addMessage(id, `You killed the ${entity.name}.`);
+          player.stats.kills++;
           level.entities.splice(entityIdx, 1);
         } else {
           const enemyDmg = Math.floor(Math.random() * 3) + 1 + Math.floor(depth * 0.3);
           player.hp -= enemyDmg;
+          player.stats.damageTaken += enemyDmg;
           this.addMessage(id, `The ${entity.name} hits you for ${enemyDmg}!`);
 
           if (player.hp <= 0) {
-            this.addMessage(id, "You have been slain...");
-            player.hp = player.maxHp;
-            player.pos = level.getRandomEmptyPos();
-            this.addMessage(id, "You respawn at the surface.");
-            const newDepth = 1;
-            this.playerDepths.set(id, newDepth);
-            const newLevel = this.getOrCreateLevel(newDepth);
-            player.pos = newLevel.getRandomEmptyPos();
-            player.explored = [];
-            for (let y = 0; y < MAP_HEIGHT; y++) {
-              player.explored.push(new Array(MAP_WIDTH).fill(false));
-            }
+            player.hp = 0;
+            player.dead = true;
+            player.stats.killedBy = entity.name;
+            this.addMessage(id, `You have been slain by the ${entity.name}...`);
           }
         }
         this.updatePlayerFOV(id);
         return true;
       } else if (entity.type === 'item') {
         this.addMessage(id, `You picked up a ${entity.name}.`);
+        player.stats.itemsCollected++;
         if (entity.name === 'Health Potion') {
           const heal = Math.min(5, player.maxHp - player.hp);
           if (heal > 0) {
@@ -418,6 +470,9 @@ export class GameWorld {
         this.broadcastToDepth(depth, `${player.name} descended deeper.`, id);
 
         this.playerDepths.set(id, newDepth);
+        if (newDepth > player.stats.deepestDepth) {
+          player.stats.deepestDepth = newDepth;
+        }
         const newLevel = this.getOrCreateLevel(newDepth);
         player.pos = newLevel.getRandomEmptyPos();
         player.explored = [];
@@ -432,6 +487,7 @@ export class GameWorld {
       player.pos = { x: newX, y: newY };
     }
 
+    player.stats.stepsWalked++;
     this.updatePlayerFOV(id);
     return true;
   }
@@ -510,6 +566,8 @@ export class GameWorld {
       },
       entities: visibleEntities,
       otherPlayers,
+      dead: player.dead,
+      stats: player.stats,
       messages,
       depth,
       onlineCount

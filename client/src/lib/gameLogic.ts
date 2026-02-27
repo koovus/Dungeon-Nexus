@@ -41,6 +41,16 @@ export interface AIBotInfo {
   depth: number;
 }
 
+export interface PlayerStatsInfo {
+  kills: number;
+  damageDealt: number;
+  damageTaken: number;
+  itemsCollected: number;
+  stepsWalked: number;
+  deepestDepth: number;
+  killedBy: string;
+}
+
 export interface GameStateSnapshot {
   map: TileState[][];
   player: PlayerInfo;
@@ -51,4 +61,6 @@ export interface GameStateSnapshot {
   onlineCount: number;
   observing?: boolean;
   aiBots?: AIBotInfo[];
+  dead?: boolean;
+  stats?: PlayerStatsInfo;
 }

@@ -56,6 +56,12 @@ export function useGameWebSocket() {
     }
   }, [observing]);
 
+  const sendRespawn = useCallback(() => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: 'respawn' }));
+    }
+  }, []);
+
   useEffect(() => {
     return () => {
       if (reconnectTimeout.current) clearTimeout(reconnectTimeout.current);
@@ -63,5 +69,5 @@ export function useGameWebSocket() {
     };
   }, []);
 
-  return { gameState, connected, connect, sendMove, observing, toggleObserve };
+  return { gameState, connected, connect, sendMove, observing, toggleObserve, sendRespawn };
 }

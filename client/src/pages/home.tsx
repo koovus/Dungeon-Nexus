@@ -1,9 +1,9 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { MAP_WIDTH, MAP_HEIGHT } from '@/lib/gameLogic';
-import type { GameStateSnapshot } from '@/lib/gameLogic';
+import type { GameStateSnapshot, PlayerStatsInfo } from '@/lib/gameLogic';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useGameWebSocket } from '@/hooks/useWebSocket';
-import { Eye, EyeOff } from 'lucide-react';
+import { Eye, EyeOff, Skull } from 'lucide-react';
 
 function JoinScreen({ onJoin }: { onJoin: (name: string) => void }) {
   const [name, setName] = useState('');
@@ -68,6 +68,74 @@ function JoinScreen({ onJoin }: { onJoin: (name: string) => void }) {
             Enter the Dungeon
           </button>
         </form>
+      </div>
+    </div>
+  );
+}
+
+function DeathScreen({ stats, playerName, depth, onRespawn }: {
+  stats: PlayerStatsInfo;
+  playerName: string;
+  depth: number;
+  onRespawn: () => void;
+}) {
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        onRespawn();
+      }
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [onRespawn]);
+
+  return (
+    <div className="h-screen w-full bg-background text-primary crt flex flex-col items-center justify-center crt-flicker font-mono">
+      <div className="relative z-10 border border-enemy/50 p-8 max-w-lg w-full mx-4 bg-enemy/5">
+        <div className="flex flex-col items-center gap-4 mb-6">
+          <Skull className="w-16 h-16 text-enemy animate-pulse" />
+          <h1 className="text-enemy text-2xl font-bold uppercase tracking-widest" style={{ textShadow: '0 0 10px rgba(255,0,0,0.6)' }}>
+            You Have Perished
+          </h1>
+          <p className="text-enemy/70 text-sm">
+            {playerName} was slain by {stats.killedBy || 'the dungeon'} on depth {depth}
+          </p>
+        </div>
+
+        <div className="border border-primary/20 p-4 mb-6 space-y-2">
+          <h2 className="text-primary/70 text-xs uppercase tracking-widest border-b border-primary/20 pb-1 mb-3">
+            Final Record
+          </h2>
+          <div className="grid grid-cols-2 gap-y-2 gap-x-4 text-sm">
+            <div className="text-primary/60">Deepest Depth</div>
+            <div className="text-player font-bold text-right" data-testid="stat-depth">{stats.deepestDepth}</div>
+
+            <div className="text-primary/60">Monsters Slain</div>
+            <div className="text-enemy font-bold text-right" data-testid="stat-kills">{stats.kills}</div>
+
+            <div className="text-primary/60">Damage Dealt</div>
+            <div className="text-player font-bold text-right" data-testid="stat-dmg-dealt">{stats.damageDealt}</div>
+
+            <div className="text-primary/60">Damage Taken</div>
+            <div className="text-enemy font-bold text-right" data-testid="stat-dmg-taken">{stats.damageTaken}</div>
+
+            <div className="text-primary/60">Items Collected</div>
+            <div className="text-item font-bold text-right" data-testid="stat-items">{stats.itemsCollected}</div>
+
+            <div className="text-primary/60">Steps Walked</div>
+            <div className="text-primary font-bold text-right" data-testid="stat-steps">{stats.stepsWalked}</div>
+          </div>
+        </div>
+
+        <button
+          data-testid="button-respawn"
+          onClick={onRespawn}
+          className="w-full py-3 border border-primary/50 text-primary uppercase tracking-widest text-sm hover:bg-primary/10 hover:border-primary transition-colors"
+          style={{ textShadow: '0 0 5px currentColor' }}
+        >
+          Enter the Dungeon Again [Enter]
+        </button>
       </div>
     </div>
   );
@@ -291,7 +359,7 @@ function GameView({
 }
 
 export default function Home() {
-  const { gameState, connected, connect, sendMove, observing, toggleObserve } = useGameWebSocket();
+  const { gameState, connected, connect, sendMove, observing, toggleObserve, sendRespawn } = useGameWebSocket();
   const [joined, setJoined] = useState(false);
 
   const handleJoin = useCallback((name: string) => {
@@ -315,6 +383,17 @@ export default function Home() {
           {!connected && <div className="text-sm text-primary/50 mt-2">Establishing link</div>}
         </div>
       </div>
+    );
+  }
+
+  if (gameState.dead && gameState.stats) {
+    return (
+      <DeathScreen
+        stats={gameState.stats}
+        playerName={gameState.player.name}
+        depth={gameState.depth}
+        onRespawn={sendRespawn}
+      />
     );
   }
 

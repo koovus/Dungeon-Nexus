@@ -192,6 +192,13 @@ export async function registerRoutes(
             break;
           }
 
+          case 'respawn': {
+            world.respawnPlayer(playerId);
+            sendState(playerId);
+            broadcastStates(1);
+            break;
+          }
+
           case 'observe': {
             if (msg.enabled) {
               observing.add(playerId);

@@ -145,6 +145,13 @@ export class AIBot {
     const depth = this.world.playerDepths.get(this.id);
     if (!player || depth === undefined) return;
 
+    if (player.dead) {
+      this.world.respawnPlayer(this.id);
+      this.path = [];
+      this.currentGoal = 'explore';
+      return;
+    }
+
     const level = this.world.getOrCreateLevel(depth);
     const visible = this.world.computeVisible(player.pos, level);
 
