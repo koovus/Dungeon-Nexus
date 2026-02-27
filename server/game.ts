@@ -359,6 +359,14 @@ export class GameWorld {
     const tile = level.map[newY][newX];
     if (!tile.walkable) return false;
 
+    const otherPlayer = Array.from(this.players.entries()).find(
+      ([pid, p]) => pid !== id && this.playerDepths.get(pid) === depth && p.pos.x === newX && p.pos.y === newY
+    );
+    if (otherPlayer) {
+      this.addMessage(id, `You pass by ${otherPlayer[1].name}.`);
+      this.addMessage(otherPlayer[0], `${player.name} passes by you.`);
+    }
+
     const entityIdx = level.entities.findIndex(e => e.pos.x === newX && e.pos.y === newY);
     if (entityIdx >= 0) {
       const entity = level.entities[entityIdx];
