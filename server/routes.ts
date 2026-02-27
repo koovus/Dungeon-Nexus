@@ -83,32 +83,9 @@ export async function registerRoutes(
 
     const level = world.getOrCreateLevel(primaryDepth);
 
-    const allExplored: boolean[][] = [];
-    for (let y = 0; y < MAP_HEIGHT; y++) {
-      allExplored.push(new Array(MAP_WIDTH).fill(false));
-    }
-
-    const allVisible: boolean[][] = [];
-    for (let y = 0; y < MAP_HEIGHT; y++) {
-      allVisible.push(new Array(MAP_WIDTH).fill(false));
-    }
-
     const botsOnDepth = depthBots.get(primaryDepth) || [primaryBot];
-    for (const bot of botsOnDepth) {
-      const p = world.players.get(bot.id);
-      if (!p) continue;
-      const vis = world.computeVisible(p.pos, level);
-      for (let y = 0; y < MAP_HEIGHT; y++) {
-        for (let x = 0; x < MAP_WIDTH; x++) {
-          if (p.explored[y][x]) allExplored[y][x] = true;
-          if (vis[y][x]) allVisible[y][x] = true;
-        }
-      }
-    }
 
-    const visibleEntities = level.entities
-      .filter(e => allVisible[e.pos.y][e.pos.x])
-      .map(e => ({ ...e }));
+    const allEntities = level.entities.map(e => ({ ...e }));
 
     const botPlayers = botsOnDepth.map(bot => {
       const p = world.players.get(bot.id)!;
@@ -129,7 +106,7 @@ export async function registerRoutes(
         pos: p.pos,
         char: '@',
         color: 'text-secondary',
-        visible: allVisible[p.pos.y][p.pos.x]
+        visible: true
       }));
 
     const messages: string[] = [];
@@ -144,11 +121,11 @@ export async function registerRoutes(
     const recentMsgs = messages.slice(-30);
 
     const state = {
-      map: level.map.map((row, y) => row.map((tile, x) => ({
+      map: level.map.map((row) => row.map((tile) => ({
         char: tile.char,
         walkable: tile.walkable,
-        visible: allVisible[y][x],
-        explored: allExplored[y][x]
+        visible: true,
+        explored: true
       }))),
       player: {
         pos: primaryPlayer.pos,
@@ -156,7 +133,7 @@ export async function registerRoutes(
         maxHp: primaryPlayer.maxHp,
         name: primaryPlayer.name
       },
-      entities: visibleEntities,
+      entities: allEntities,
       otherPlayers: [...botPlayers.slice(1), ...humanPlayers],
       messages: recentMsgs,
       depth: primaryDepth,
