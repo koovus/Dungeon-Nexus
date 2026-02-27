@@ -31,6 +31,13 @@ export async function registerRoutes(
     bot.start();
   }
 
+  setInterval(() => {
+    const affectedDepths = world.tickEnemies();
+    for (const depth of affectedDepths) {
+      broadcastStates(depth);
+    }
+  }, 800);
+
   function sendState(playerId: string) {
     const ws = clients.get(playerId);
     if (!ws || ws.readyState !== WebSocket.OPEN) return;

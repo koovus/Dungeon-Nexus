@@ -507,6 +507,59 @@ export class GameWorld {
     return true;
   }
 
+  tickEnemies(): Set<number> {
+    const affectedDepths = new Set<number>();
+    const dirs: [number, number][] = [[0, -1], [0, 1], [-1, 0], [1, 0]];
+
+    for (const [depth, level] of this.levels) {
+      for (const entity of level.entities) {
+        if (entity.type !== 'enemy') continue;
+        if (entity.char === entity.char.toLowerCase()) continue;
+
+        if (Math.random() > 0.3) continue;
+
+        const shuffled = [...dirs].sort(() => Math.random() - 0.5);
+        for (const [dx, dy] of shuffled) {
+          const nx = entity.pos.x + dx;
+          const ny = entity.pos.y + dy;
+
+          if (nx < 0 || nx >= MAP_WIDTH || ny < 0 || ny >= MAP_HEIGHT) continue;
+          if (!level.map[ny][nx].walkable) continue;
+
+          const blocked = level.entities.some(e => e !== entity && e.pos.x === nx && e.pos.y === ny);
+          if (blocked) continue;
+
+          const hitPlayer = Array.from(this.players.entries()).find(
+            ([pid, p]) => !p.dead && this.playerDepths.get(pid) === depth && p.pos.x === nx && p.pos.y === ny
+          );
+
+          if (hitPlayer) {
+            const [pid, p] = hitPlayer;
+            const dmg = Math.floor(Math.random() * 3) + 1 + Math.floor(depth * 0.3);
+            p.hp -= dmg;
+            p.stats.damageTaken += dmg;
+            this.addMessage(pid, `The ${entity.name} attacks you for ${dmg}!`);
+
+            if (p.hp <= 0) {
+              p.hp = 0;
+              p.dead = true;
+              p.stats.killedBy = entity.name;
+              this.addMessage(pid, `You have been slain by the ${entity.name}...`);
+            }
+            affectedDepths.add(depth);
+            break;
+          }
+
+          entity.pos = { x: nx, y: ny };
+          affectedDepths.add(depth);
+          break;
+        }
+      }
+    }
+
+    return affectedDepths;
+  }
+
   updatePlayerFOV(id: string) {
     const player = this.players.get(id);
     const depth = this.playerDepths.get(id);
