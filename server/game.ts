@@ -81,6 +81,7 @@ const DEFAULT_ITEMS: ItemDef[] = [
   { char: '[', name: 'Shield', color: 'text-secondary' },
   { char: '/', name: 'Wand', color: 'text-item' },
   { char: '%', name: 'Food', color: 'text-item' },
+  { char: '"', name: 'Healing Herb', color: 'text-primary' },
 ];
 
 interface Room {
@@ -462,6 +463,18 @@ export class GameWorld {
           if (heal > 0) {
             player.hp += heal;
             this.addMessage(id, `Restored ${heal} HP.`);
+          }
+        } else if (entity.name === 'Food') {
+          const heal = Math.min(3, player.maxHp - player.hp);
+          if (heal > 0) {
+            player.hp += heal;
+            this.addMessage(id, `The food restores ${heal} HP.`);
+          }
+        } else if (entity.name === 'Healing Herb') {
+          const heal = Math.min(8, player.maxHp - player.hp);
+          if (heal > 0) {
+            player.hp += heal;
+            this.addMessage(id, `The herb restores ${heal} HP!`);
           }
         }
         level.entities.splice(entityIdx, 1);

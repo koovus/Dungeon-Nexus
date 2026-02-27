@@ -203,7 +203,7 @@ export class AIBot {
   decide(player: { pos: Position; hp: number; maxHp: number; explored: boolean[][] }, level: DungeonLevel, visible: boolean[][]) {
     if (player.hp < player.maxHp * 0.4) {
       const potion = this.findClosestVisible(level, visible, player.pos, e =>
-        e.type === 'item' && e.name === 'Health Potion'
+        e.type === 'item' && (e.name === 'Health Potion' || e.name === 'Healing Herb' || e.name === 'Food')
       );
       if (potion) return { target: potion, goal: 'heal' };
     }
