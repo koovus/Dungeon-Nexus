@@ -8,6 +8,7 @@ const AI_NAMES = [
 
 export class AIBot {
   id: string;
+  name: string;
   world: GameWorld;
   target: Position | null = null;
   tickInterval: ReturnType<typeof setInterval> | null = null;
@@ -15,18 +16,28 @@ export class AIBot {
   lastPos: Position = { x: -1, y: -1 };
   onChange: (() => void) | null = null;
   recentPositions: Position[] = [];
+  tickSpeed: number;
 
-  constructor(world: GameWorld) {
+  constructor(world: GameWorld, tickSpeed = 400) {
     this.world = world;
+    this.tickSpeed = tickSpeed;
     this.id = `ai_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
-    const name = AI_NAMES[Math.floor(Math.random() * AI_NAMES.length)];
-    this.world.addPlayer(this.id, name, true);
-    log(`AI Bot ${name} (${this.id}) spawned`, "ai");
+    this.name = AI_NAMES[Math.floor(Math.random() * AI_NAMES.length)];
+    this.world.addPlayer(this.id, this.name, true);
+    log(`AI Bot ${this.name} (${this.id}) spawned`, "ai");
   }
 
   start(onChange?: () => void) {
     this.onChange = onChange || null;
-    this.tickInterval = setInterval(() => this.tick(), 400);
+    this.tickInterval = setInterval(() => this.tick(), this.tickSpeed);
+  }
+
+  setSpeed(ms: number) {
+    this.tickSpeed = ms;
+    if (this.tickInterval) {
+      clearInterval(this.tickInterval);
+      this.tickInterval = setInterval(() => this.tick(), this.tickSpeed);
+    }
   }
 
   stop() {

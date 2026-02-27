@@ -34,6 +34,13 @@ export interface OtherPlayerInfo {
   visible: boolean;
 }
 
+export interface AIBotInfo {
+  name: string;
+  hp: number;
+  maxHp: number;
+  depth: number;
+}
+
 export interface GameStateSnapshot {
   map: TileState[][];
   player: PlayerInfo;
@@ -43,4 +50,5 @@ export interface GameStateSnapshot {
   depth: number;
   onlineCount: number;
   observing?: boolean;
+  aiBots?: AIBotInfo[];
 }

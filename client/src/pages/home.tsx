@@ -162,22 +162,41 @@ function GameView({
       <div className="flex-1 flex flex-col p-4 max-w-7xl mx-auto w-full gap-3 relative z-10 min-h-0">
 
         {/* Observe Mode Banner */}
-        {observing && (
-          <div className="bg-item/10 border border-item/40 px-4 py-2 text-item text-center text-sm uppercase tracking-widest shrink-0 flex items-center justify-center gap-2 animate-pulse">
-            <Eye className="w-4 h-4" />
-            Observing AI — {state.player.name}
-            <Eye className="w-4 h-4" />
+        {observing && state.aiBots && (
+          <div className="bg-item/5 border border-item/30 px-4 py-2 shrink-0">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-item text-xs uppercase tracking-widest">
+                <Eye className="w-4 h-4 animate-pulse" />
+                Observing {state.aiBots.length} AI Agents — 10x Speed
+              </div>
+              <div className="flex gap-3">
+                {state.aiBots.map((bot, i) => (
+                  <div key={i} className="flex items-center gap-1.5 text-xs">
+                    <span className="text-item font-bold">@</span>
+                    <span className="text-item/80">{bot.name}</span>
+                    <span className={bot.hp <= 5 ? "text-enemy" : "text-primary/50"}>
+                      {bot.hp}/{bot.maxHp}
+                    </span>
+                    <span className="text-primary/30">D{bot.depth}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         )}
 
         <header className="border-b border-primary/50 pb-2 flex justify-between items-end font-bold uppercase tracking-wider shrink-0">
           <div className="flex gap-4 items-end">
-            <span className={observing ? "text-item" : "text-player"} data-testid="text-player-name">
-              {observing ? `[AI] ${state.player.name}` : state.player.name}
-            </span>
-            <span className={state.player.hp <= 5 ? "text-enemy animate-pulse" : "text-primary"} data-testid="text-player-hp">
-              HP: {state.player.hp}/{state.player.maxHp}
-            </span>
+            {observing ? (
+              <span className="text-item" data-testid="text-player-name">[AI] {state.player.name}</span>
+            ) : (
+              <span className="text-player" data-testid="text-player-name">{state.player.name}</span>
+            )}
+            {!observing && (
+              <span className={state.player.hp <= 5 ? "text-enemy animate-pulse" : "text-primary"} data-testid="text-player-hp">
+                HP: {state.player.hp}/{state.player.maxHp}
+              </span>
+            )}
           </div>
           <div className="flex items-center gap-4">
             <button

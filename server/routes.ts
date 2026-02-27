@@ -1,9 +1,12 @@
 import type { Express } from "express";
 import { type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
-import { GameWorld } from "./game";
+import { GameWorld, MAP_WIDTH, MAP_HEIGHT } from "./game";
 import { AIBot } from "./aiBot";
 import { log } from "./index";
+
+const NUM_AI_BOTS = 4;
+const AI_TICK_SPEED = 40;
 
 export async function registerRoutes(
   httpServer: Server,
@@ -17,24 +20,41 @@ export async function registerRoutes(
   });
 
   const clients = new Map<string, WebSocket>();
-  const observing = new Map<string, string>();
+  const observing = new Set<string>();
   let nextId = 1;
 
-  const aiBot = new AIBot(world);
-  aiBot.start(() => {
-    for (const [clientId, botId] of observing.entries()) {
-      if (botId === aiBot.id) {
-        sendBotState(clientId, botId);
+  const aiBots: AIBot[] = [];
+  for (let i = 0; i < NUM_AI_BOTS; i++) {
+    const bot = new AIBot(world, AI_TICK_SPEED);
+    aiBots.push(bot);
+  }
+
+  let observeThrottle: ReturnType<typeof setInterval> | null = null;
+
+  function startObserveBroadcast() {
+    if (observeThrottle) return;
+    observeThrottle = setInterval(() => {
+      if (observing.size === 0) {
+        if (observeThrottle) clearInterval(observeThrottle);
+        observeThrottle = null;
+        return;
       }
-    }
-  });
+      for (const clientId of observing) {
+        sendObserveState(clientId);
+      }
+    }, AI_TICK_SPEED);
+  }
+
+  for (const bot of aiBots) {
+    bot.start();
+  }
 
   function sendState(playerId: string) {
     const ws = clients.get(playerId);
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
 
     if (observing.has(playerId)) {
-      sendBotState(playerId, observing.get(playerId)!);
+      sendObserveState(playerId);
       return;
     }
 
@@ -44,22 +64,116 @@ export async function registerRoutes(
     }
   }
 
-  function sendBotState(clientId: string, botId: string) {
+  function sendObserveState(clientId: string) {
     const ws = clients.get(clientId);
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
 
-    const state = world.getStateForPlayer(botId);
-    if (state) {
-      ws.send(JSON.stringify({ type: 'state', data: { ...state, observing: true } }));
+    const depthBots = new Map<number, AIBot[]>();
+    for (const bot of aiBots) {
+      const d = world.playerDepths.get(bot.id);
+      if (d === undefined) continue;
+      if (!depthBots.has(d)) depthBots.set(d, []);
+      depthBots.get(d)!.push(bot);
     }
+
+    const primaryBot = aiBots[0];
+    const primaryDepth = world.playerDepths.get(primaryBot.id) ?? 1;
+    const primaryPlayer = world.players.get(primaryBot.id);
+    if (!primaryPlayer) return;
+
+    const level = world.getOrCreateLevel(primaryDepth);
+
+    const allExplored: boolean[][] = [];
+    for (let y = 0; y < MAP_HEIGHT; y++) {
+      allExplored.push(new Array(MAP_WIDTH).fill(false));
+    }
+
+    const allVisible: boolean[][] = [];
+    for (let y = 0; y < MAP_HEIGHT; y++) {
+      allVisible.push(new Array(MAP_WIDTH).fill(false));
+    }
+
+    const botsOnDepth = depthBots.get(primaryDepth) || [primaryBot];
+    for (const bot of botsOnDepth) {
+      const p = world.players.get(bot.id);
+      if (!p) continue;
+      const vis = world.computeVisible(p.pos, level);
+      for (let y = 0; y < MAP_HEIGHT; y++) {
+        for (let x = 0; x < MAP_WIDTH; x++) {
+          if (p.explored[y][x]) allExplored[y][x] = true;
+          if (vis[y][x]) allVisible[y][x] = true;
+        }
+      }
+    }
+
+    const visibleEntities = level.entities
+      .filter(e => allVisible[e.pos.y][e.pos.x])
+      .map(e => ({ ...e }));
+
+    const botPlayers = botsOnDepth.map(bot => {
+      const p = world.players.get(bot.id)!;
+      return {
+        name: p.name,
+        pos: p.pos,
+        char: '@',
+        color: 'text-item',
+        visible: true,
+        isAI: true
+      };
+    });
+
+    const humanPlayers = Array.from(world.players.entries())
+      .filter(([pid]) => !aiBots.some(b => b.id === pid) && world.playerDepths.get(pid) === primaryDepth)
+      .map(([_, p]) => ({
+        name: p.name,
+        pos: p.pos,
+        char: '@',
+        color: 'text-secondary',
+        visible: allVisible[p.pos.y][p.pos.x]
+      }));
+
+    const messages: string[] = [];
+    for (const bot of botsOnDepth) {
+      const botMsgs = world.messageLog.get(bot.id) || [];
+      const p = world.players.get(bot.id);
+      for (const msg of botMsgs.slice(-8)) {
+        messages.push(`[${p?.name || 'AI'}] ${msg}`);
+      }
+    }
+    messages.sort();
+    const recentMsgs = messages.slice(-30);
+
+    const state = {
+      map: level.map.map((row, y) => row.map((tile, x) => ({
+        char: tile.char,
+        walkable: tile.walkable,
+        visible: allVisible[y][x],
+        explored: allExplored[y][x]
+      }))),
+      player: {
+        pos: primaryPlayer.pos,
+        hp: primaryPlayer.hp,
+        maxHp: primaryPlayer.maxHp,
+        name: primaryPlayer.name
+      },
+      entities: visibleEntities,
+      otherPlayers: [...botPlayers.slice(1), ...humanPlayers],
+      messages: recentMsgs,
+      depth: primaryDepth,
+      onlineCount: world.players.size,
+      observing: true,
+      aiBots: botsOnDepth.map(bot => {
+        const p = world.players.get(bot.id)!;
+        return { name: p.name, hp: p.hp, maxHp: p.maxHp, depth: world.playerDepths.get(bot.id) ?? 1 };
+      })
+    };
+
+    ws.send(JSON.stringify({ type: 'state', data: state }));
   }
 
   function broadcastStates(depth?: number) {
     for (const [pid] of clients) {
-      if (observing.has(pid)) {
-        sendBotState(pid, observing.get(pid)!);
-        continue;
-      }
+      if (observing.has(pid)) continue;
       if (depth !== undefined) {
         const pDepth = world.playerDepths.get(pid);
         if (pDepth !== depth) continue;
@@ -103,8 +217,9 @@ export async function registerRoutes(
 
           case 'observe': {
             if (msg.enabled) {
-              observing.set(playerId, aiBot.id);
-              sendBotState(playerId, aiBot.id);
+              observing.add(playerId);
+              sendObserveState(playerId);
+              startObserveBroadcast();
               log(`Player ${playerId} started observing AI`, "game");
             } else {
               observing.delete(playerId);
