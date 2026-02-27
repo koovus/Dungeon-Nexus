@@ -111,12 +111,17 @@ export class AIBot {
   currentGoal: string = 'explore';
   pathRecalcCounter = 0;
 
-  constructor(world: GameWorld, tickSpeed = 400) {
+  constructor(world: GameWorld, tickSpeed = 600) {
     this.world = world;
     this.tickSpeed = tickSpeed;
     this.id = `ai_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
     this.name = AI_NAMES[Math.floor(Math.random() * AI_NAMES.length)];
     this.world.addPlayer(this.id, this.name, true);
+    const player = this.world.players.get(this.id);
+    if (player) {
+      player.hp = 12;
+      player.maxHp = 12;
+    }
     log(`AI Bot ${this.name} (${this.id}) spawned`, "ai");
   }
 
@@ -147,6 +152,11 @@ export class AIBot {
 
     if (player.dead) {
       this.world.respawnPlayer(this.id);
+      const respawned = this.world.players.get(this.id);
+      if (respawned) {
+        respawned.hp = 12;
+        respawned.maxHp = 12;
+      }
       this.path = [];
       this.currentGoal = 'explore';
       return;
@@ -201,22 +211,22 @@ export class AIBot {
   }
 
   decide(player: { pos: Position; hp: number; maxHp: number; explored: boolean[][] }, level: DungeonLevel, visible: boolean[][]) {
-    if (player.hp < player.maxHp * 0.4) {
+    if (player.hp < player.maxHp * 0.3) {
       const potion = this.findClosestVisible(level, visible, player.pos, e =>
         e.type === 'item' && (e.name === 'Health Potion' || e.name === 'Healing Herb' || e.name === 'Food')
       );
       if (potion) return { target: potion, goal: 'heal' };
     }
 
-    const enemy = this.findClosestVisible(level, visible, player.pos, e =>
-      e.type === 'enemy' && Math.abs(e.pos.x - player.pos.x) + Math.abs(e.pos.y - player.pos.y) <= 6
+    const adjacentEnemy = this.findClosestVisible(level, visible, player.pos, e =>
+      e.type === 'enemy' && Math.abs(e.pos.x - player.pos.x) <= 1 && Math.abs(e.pos.y - player.pos.y) <= 1
     );
-    if (enemy && player.hp > player.maxHp * 0.3) {
-      return { target: enemy, goal: 'fight' };
+    if (adjacentEnemy && Math.random() < 0.4) {
+      return { target: adjacentEnemy, goal: 'fight' };
     }
 
     const item = this.findClosestVisible(level, visible, player.pos, e =>
-      e.type === 'item' && Math.abs(e.pos.x - player.pos.x) + Math.abs(e.pos.y - player.pos.y) <= 10
+      e.type === 'item' && Math.abs(e.pos.x - player.pos.x) + Math.abs(e.pos.y - player.pos.y) <= 5
     );
     if (item) return { target: item, goal: 'loot' };
 

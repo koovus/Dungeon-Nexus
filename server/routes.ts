@@ -6,7 +6,7 @@ import { AIBot } from "./aiBot";
 import { log } from "./index";
 
 const NUM_AI_BOTS = 4;
-const AI_TICK_SPEED = 400;
+const AI_TICK_SPEED = 600;
 
 export async function registerRoutes(
   httpServer: Server,
