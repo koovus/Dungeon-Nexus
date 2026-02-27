@@ -434,8 +434,10 @@ export class GameWorld {
         this.addMessage(id, `You hit the ${entity.name} for ${dmg} damage!`);
 
         if (entity.hp! <= 0) {
-          this.addMessage(id, `You killed the ${entity.name}.`);
           player.stats.kills++;
+          player.maxHp += 2;
+          player.hp = Math.min(player.hp + 2, player.maxHp);
+          this.addMessage(id, `You killed the ${entity.name}. [+2 Max HP]`);
           level.entities.splice(entityIdx, 1);
         } else {
           const enemyDmg = Math.floor(Math.random() * 3) + 1 + Math.floor(depth * 0.3);
