@@ -2,7 +2,11 @@ import type { Express } from "express";
 import { type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import { GameWorld } from "./game";
+import { AIBot } from "./aiBot";
 import { log } from "./index";
+
+const NUM_AI_BOTS = 4;
+const AI_TICK_SPEED = 400;
 
 export async function registerRoutes(
   httpServer: Server,
@@ -17,6 +21,15 @@ export async function registerRoutes(
 
   const clients = new Map<string, WebSocket>();
   let nextId = 1;
+
+  const aiBots: AIBot[] = [];
+  for (let i = 0; i < NUM_AI_BOTS; i++) {
+    const bot = new AIBot(world, AI_TICK_SPEED);
+    aiBots.push(bot);
+  }
+  for (const bot of aiBots) {
+    bot.start();
+  }
 
   function sendState(playerId: string) {
     const ws = clients.get(playerId);
