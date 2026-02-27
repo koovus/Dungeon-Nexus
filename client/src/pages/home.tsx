@@ -3,7 +3,7 @@ import { MAP_WIDTH, MAP_HEIGHT } from '@/lib/gameLogic';
 import type { GameStateSnapshot, PlayerStatsInfo } from '@/lib/gameLogic';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useGameWebSocket } from '@/hooks/useWebSocket';
-import { Eye, EyeOff, Skull } from 'lucide-react';
+import { Skull } from 'lucide-react';
 
 function JoinScreen({ onJoin }: { onJoin: (name: string) => void }) {
   const [name, setName] = useState('');
@@ -143,20 +143,15 @@ function DeathScreen({ stats, playerName, depth, onRespawn }: {
 
 function GameView({
   state,
-  onMove,
-  observing,
-  onToggleObserve
+  onMove
 }: {
   state: GameStateSnapshot;
   onMove: (dx: number, dy: number) => void;
-  observing: boolean;
-  onToggleObserve: () => void;
 }) {
   const logRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (observing) return;
       let dx = 0;
       let dy = 0;
 
@@ -174,7 +169,7 @@ function GameView({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onMove, observing]);
+  }, [onMove]);
 
   useEffect(() => {
     if (logRef.current) {
@@ -201,7 +196,7 @@ function GameView({
         const isPlayer = state.player.pos.x === x && state.player.pos.y === y;
 
         if (isPlayer) {
-          rowChars.push(<span key={key} className={observing ? "text-item" : "text-player"}>@</span>);
+          rowChars.push(<span key={key} className="text-player">@</span>);
         } else if (otherPlayerMap.has(key)) {
           const op = otherPlayerMap.get(key)!;
           rowChars.push(<span key={key} className={op.color}>{op.char}</span>);
@@ -229,59 +224,15 @@ function GameView({
     <div className="h-screen w-full bg-background text-primary crt flex flex-col crt-flicker">
       <div className="flex-1 flex flex-col p-4 max-w-7xl mx-auto w-full gap-3 relative z-10 min-h-0">
 
-        {/* Observe Mode Banner */}
-        {observing && state.aiBots && (
-          <div className="bg-item/5 border border-item/30 px-4 py-2 shrink-0">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-item text-xs uppercase tracking-widest">
-                <Eye className="w-4 h-4 animate-pulse" />
-                Observing {state.aiBots.length} AI Agents — 10x Speed
-              </div>
-              <div className="flex gap-3">
-                {state.aiBots.map((bot, i) => (
-                  <div key={i} className="flex items-center gap-1.5 text-xs">
-                    <span className="text-item font-bold">@</span>
-                    <span className="text-item/80">{bot.name}</span>
-                    <span className={bot.hp <= 5 ? "text-enemy" : "text-primary/50"}>
-                      {bot.hp}/{bot.maxHp}
-                    </span>
-                    <span className="text-primary/30">D{bot.depth}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
-
         <header className="border-b border-primary/50 pb-2 flex justify-between items-end font-bold uppercase tracking-wider shrink-0">
           <div className="flex gap-4 items-end">
-            {observing ? (
-              <span className="text-item" data-testid="text-player-name">[AI] {state.player.name}</span>
-            ) : (
-              <span className="text-player" data-testid="text-player-name">{state.player.name}</span>
-            )}
-            {!observing && (
-              <span className={state.player.hp <= 5 ? "text-enemy animate-pulse" : "text-primary"} data-testid="text-player-hp">
-                HP: {state.player.hp}/{state.player.maxHp}
-              </span>
-            )}
+            <span className="text-player" data-testid="text-player-name">{state.player.name}</span>
+            <span className={state.player.hp <= 5 ? "text-enemy animate-pulse" : "text-primary"} data-testid="text-player-hp">
+              HP: {state.player.hp}/{state.player.maxHp}
+            </span>
           </div>
-          <div className="flex items-center gap-4">
-            <button
-              data-testid="button-observe"
-              onClick={onToggleObserve}
-              className={`flex items-center gap-2 text-xs px-3 py-1 border uppercase tracking-widest transition-colors ${
-                observing
-                  ? 'border-item/50 text-item bg-item/10 hover:bg-item/20'
-                  : 'border-primary/50 text-primary/70 hover:bg-primary/10 hover:text-primary'
-              }`}
-            >
-              {observing ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
-              {observing ? 'Stop Observing' : 'Observe AI'}
-            </button>
-            <div className="text-primary/50 text-sm" data-testid="text-depth-info">
-              Depth: {state.depth} | Online: {state.onlineCount}
-            </div>
+          <div className="text-primary/50 text-sm" data-testid="text-depth-info">
+            Depth: {state.depth} | Online: {state.onlineCount}
           </div>
         </header>
 
@@ -301,7 +252,7 @@ function GameView({
             </div>
 
             <div className="absolute bottom-2 right-2 text-xs opacity-40 uppercase tracking-widest z-30">
-              {observing ? '[Observing]' : '[WASD] move'}
+              [WASD] move
             </div>
           </div>
 
@@ -359,7 +310,7 @@ function GameView({
 }
 
 export default function Home() {
-  const { gameState, connected, connect, sendMove, observing, toggleObserve, sendRespawn } = useGameWebSocket();
+  const { gameState, connected, connect, sendMove, sendRespawn } = useGameWebSocket();
   const [joined, setJoined] = useState(false);
 
   const handleJoin = useCallback((name: string) => {
@@ -401,8 +352,6 @@ export default function Home() {
     <GameView
       state={gameState}
       onMove={handleMove}
-      observing={observing}
-      onToggleObserve={toggleObserve}
     />
   );
 }

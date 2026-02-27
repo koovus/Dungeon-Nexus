@@ -5,7 +5,6 @@ export function useGameWebSocket() {
   const wsRef = useRef<WebSocket | null>(null);
   const [gameState, setGameState] = useState<GameStateSnapshot | null>(null);
   const [connected, setConnected] = useState(false);
-  const [observing, setObserving] = useState(false);
   const reconnectTimeout = useRef<ReturnType<typeof setTimeout>>();
 
   const connect = useCallback((name: string) => {
@@ -48,14 +47,6 @@ export function useGameWebSocket() {
     }
   }, []);
 
-  const toggleObserve = useCallback(() => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      const newVal = !observing;
-      setObserving(newVal);
-      wsRef.current.send(JSON.stringify({ type: 'observe', enabled: newVal }));
-    }
-  }, [observing]);
-
   const sendRespawn = useCallback(() => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({ type: 'respawn' }));
@@ -69,5 +60,5 @@ export function useGameWebSocket() {
     };
   }, []);
 
-  return { gameState, connected, connect, sendMove, observing, toggleObserve, sendRespawn };
+  return { gameState, connected, connect, sendMove, sendRespawn };
 }

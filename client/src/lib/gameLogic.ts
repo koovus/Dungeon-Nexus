@@ -34,13 +34,6 @@ export interface OtherPlayerInfo {
   visible: boolean;
 }
 
-export interface AIBotInfo {
-  name: string;
-  hp: number;
-  maxHp: number;
-  depth: number;
-}
-
 export interface PlayerStatsInfo {
   kills: number;
   damageDealt: number;
@@ -59,8 +52,6 @@ export interface GameStateSnapshot {
   messages: string[];
   depth: number;
   onlineCount: number;
-  observing?: boolean;
-  aiBots?: AIBotInfo[];
   dead?: boolean;
   stats?: PlayerStatsInfo;
 }
