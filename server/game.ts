@@ -346,6 +346,7 @@ export class GameWorld {
     if (!player) return;
 
     player.dead = false;
+    player.maxHp = 20;
     player.hp = player.maxHp;
     player.stats = {
       kills: 0,
