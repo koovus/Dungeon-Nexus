@@ -12,9 +12,10 @@ A real-time multiplayer ASCII roguelike MUD where multiple players explore proce
 - `server/game.ts` — Core game logic: dungeon generation, per-player instances, rift system, FOV, combat
 - `server/aiBot.ts` — AI bot that autonomously explores dungeons
 - `server/routes.ts` — WebSocket server handling player connections, moves, rift broadcasts
-- `client/src/pages/home.tsx` — Main game UI (join screen, game view, death screen, rift banners)
+- `client/src/pages/home.tsx` — Main game UI (join screen, game view, death screen, rift banners, 2D/3D toggle)
 - `client/src/hooks/useWebSocket.ts` — WebSocket client hook
 - `client/src/lib/gameLogic.ts` — Shared TypeScript types for game state
+- `client/src/components/DungeonView3D.tsx` — Three.js 3D dungeon renderer (observation mode)
 - `client/src/components/GameSettings.tsx` — Legacy settings component (unused)
 
 ## Game Features
@@ -38,6 +39,17 @@ A real-time multiplayer ASCII roguelike MUD where multiple players explore proce
 - **Ambient sounds**: Randomly scheduled every 4-14s — footstep pairs, foot drag (optionally followed by distant growl), distant growl
 - Mute button in game header, persisted in localStorage
 - Audio initialized on join button click (browser autoplay policy)
+
+## 3D Observation Mode
+- Toggle button in game header switches between ASCII (2D) and 3D views
+- Three.js renderer: walls as instanced cubes, floors as instanced planes, entities as extruded 3D shapes
+- Third-person camera follows player with smooth lerp; point light at player position (torch effect)
+- Items rotate and bob; enemies bob gently; player character glows yellow
+- Rift mode shifts fog/lighting to purple atmosphere
+- No fog of war in 3D mode — all explored tiles visible
+- Lazy-loaded (code-split) to avoid impacting ASCII mode bundle size
+- Preference stored in localStorage
+- Dependencies: `three`, `@types/three`
 
 ## Style
 - Monospace font (Fira Code), terminal green (#00FF00) on black

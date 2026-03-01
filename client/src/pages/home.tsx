@@ -1,9 +1,11 @@
-import { useEffect, useState, useRef, useCallback } from 'react';
+import { useEffect, useState, useRef, useCallback, lazy, Suspense } from 'react';
 import { MAP_WIDTH, MAP_HEIGHT } from '@/lib/gameLogic';
 import type { GameStateSnapshot, PlayerStatsInfo } from '@/lib/gameLogic';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useGameWebSocket } from '@/hooks/useWebSocket';
-import { Skull, Volume2, VolumeX } from 'lucide-react';
+import { Skull, Volume2, VolumeX, Eye, Monitor } from 'lucide-react';
+
+const DungeonView3D = lazy(() => import('@/components/DungeonView3D'));
 import {
   initAudio,
   setMuted,
@@ -248,6 +250,26 @@ function AudioController({ state }: { state: GameStateSnapshot }) {
   return null;
 }
 
+function ViewModeToggle({ mode, setMode }: { mode: '2d' | '3d'; setMode: (m: '2d' | '3d') => void }) {
+  const toggle = () => {
+    const next = mode === '2d' ? '3d' : '2d';
+    setMode(next);
+    try { localStorage.setItem('dungeon-view-mode', next); } catch {}
+  };
+
+  return (
+    <button
+      data-testid="button-view-mode"
+      onClick={toggle}
+      className="border border-primary/30 px-2 py-1 text-primary/70 hover:text-primary hover:border-primary/60 transition-colors flex items-center gap-1.5 text-xs uppercase tracking-wider"
+      title={mode === '2d' ? 'Switch to 3D view' : 'Switch to ASCII view'}
+    >
+      {mode === '2d' ? <Eye className="w-3.5 h-3.5" /> : <Monitor className="w-3.5 h-3.5" />}
+      {mode === '2d' ? '3D' : 'ASCII'}
+    </button>
+  );
+}
+
 function GameView({
   state,
   onMove
@@ -256,6 +278,9 @@ function GameView({
   onMove: (dx: number, dy: number) => void;
 }) {
   const logRef = useRef<HTMLDivElement>(null);
+  const [viewMode, setViewMode] = useState<'2d' | '3d'>(() => {
+    try { return (localStorage.getItem('dungeon-view-mode') as '2d' | '3d') || '2d'; } catch { return '2d'; }
+  });
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -369,28 +394,42 @@ function GameView({
           </div>
           <div className="text-primary/50 text-sm flex items-center gap-3" data-testid="text-depth-info">
             <span>Depth: {state.depth} | Online: {state.onlineCount}</span>
+            <ViewModeToggle mode={viewMode} setMode={setViewMode} />
             <MuteButton />
           </div>
         </header>
 
         <div className="flex-1 flex gap-4 min-h-0 overflow-hidden">
 
-          <div className={`flex-1 border p-4 bg-background overflow-hidden relative ${state.riftActive ? 'border-purple-500/50' : 'border-primary/30'}`}>
-            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_40%,rgba(0,0,0,0.4)_100%)] pointer-events-none z-20"></div>
-
-            <div className="h-full w-full flex items-center justify-center">
-              <div
-                className="font-mono text-sm tracking-widest relative z-10 transform-gpu"
-                style={{ textShadow: '0 0 5px currentColor' }}
-                data-testid="game-map"
-              >
-                {renderMap()}
-              </div>
-            </div>
-
-            <div className="absolute bottom-2 right-2 text-xs opacity-40 uppercase tracking-widest z-30">
-              [WASD] move
-            </div>
+          <div className={`flex-1 border bg-background overflow-hidden relative ${viewMode === '2d' ? 'p-4' : 'p-0'} ${state.riftActive ? 'border-purple-500/50' : 'border-primary/30'}`}>
+            {viewMode === '2d' ? (
+              <>
+                <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_40%,rgba(0,0,0,0.4)_100%)] pointer-events-none z-20"></div>
+                <div className="h-full w-full flex items-center justify-center">
+                  <div
+                    className="font-mono text-sm tracking-widest relative z-10 transform-gpu"
+                    style={{ textShadow: '0 0 5px currentColor' }}
+                    data-testid="game-map"
+                  >
+                    {renderMap()}
+                  </div>
+                </div>
+                <div className="absolute bottom-2 right-2 text-xs opacity-40 uppercase tracking-widest z-30">
+                  [WASD] move
+                </div>
+              </>
+            ) : (
+              <Suspense fallback={
+                <div className="h-full w-full flex items-center justify-center text-primary/50 uppercase tracking-widest text-sm animate-pulse">
+                  Loading 3D view...
+                </div>
+              }>
+                <DungeonView3D state={state} />
+                <div className="absolute bottom-2 right-2 text-xs opacity-40 uppercase tracking-widest z-30">
+                  [WASD] move | 3D mode
+                </div>
+              </Suspense>
+            )}
           </div>
 
           <div className="w-72 flex flex-col gap-3 min-h-0">
