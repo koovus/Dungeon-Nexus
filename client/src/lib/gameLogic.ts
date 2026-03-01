@@ -54,4 +54,7 @@ export interface GameStateSnapshot {
   onlineCount: number;
   dead?: boolean;
   stats?: PlayerStatsInfo;
+  riftActive?: boolean;
+  riftWarning?: boolean;
+  riftTurnsLeft?: number;
 }

@@ -224,6 +224,35 @@ function GameView({
     <div className="h-screen w-full bg-background text-primary crt flex flex-col crt-flicker">
       <div className="flex-1 flex flex-col p-4 max-w-7xl mx-auto w-full gap-3 relative z-10 min-h-0">
 
+        {state.riftWarning && (
+          <div
+            className="border border-purple-500/60 bg-purple-500/10 px-4 py-2 text-center animate-pulse shrink-0"
+            style={{ textShadow: '0 0 8px rgba(168, 85, 247, 0.6)' }}
+            data-testid="rift-warning-banner"
+          >
+            <span className="text-purple-400 uppercase tracking-widest text-sm font-bold">
+              A Dimension Gate Is Forming...
+            </span>
+          </div>
+        )}
+
+        {state.riftActive && (
+          <div
+            className="border border-purple-500/80 bg-purple-500/15 px-4 py-2 text-center shrink-0"
+            style={{ textShadow: '0 0 10px rgba(168, 85, 247, 0.8)' }}
+            data-testid="rift-active-banner"
+          >
+            <span className="text-purple-300 uppercase tracking-widest text-sm font-bold animate-pulse">
+              Dimension Rift Active
+            </span>
+            {state.riftTurnsLeft !== undefined && (
+              <span className="text-purple-400/70 text-xs ml-3">
+                [{state.riftTurnsLeft} turns remaining]
+              </span>
+            )}
+          </div>
+        )}
+
         <header className="border-b border-primary/50 pb-2 flex justify-between items-end font-bold uppercase tracking-wider shrink-0">
           <div className="flex gap-4 items-end">
             <span className="text-player" data-testid="text-player-name">{state.player.name}</span>
@@ -238,7 +267,7 @@ function GameView({
 
         <div className="flex-1 flex gap-4 min-h-0 overflow-hidden">
 
-          <div className="flex-1 border border-primary/30 p-4 bg-background overflow-hidden relative">
+          <div className={`flex-1 border p-4 bg-background overflow-hidden relative ${state.riftActive ? 'border-purple-500/50' : 'border-primary/30'}`}>
             <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_40%,rgba(0,0,0,0.4)_100%)] pointer-events-none z-20"></div>
 
             <div className="h-full w-full flex items-center justify-center">

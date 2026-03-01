@@ -91,16 +91,29 @@ interface Room {
   h: number;
 }
 
+export interface DimensionRift {
+  level: DungeonLevel;
+  participants: Set<string>;
+  turnsRemaining: number;
+  depth: number;
+  preRiftState: Map<string, { depth: number; pos: Position; explored: boolean[][] }>;
+}
+
+export interface RiftWarning {
+  participants: Set<string>;
+  ticksLeft: number;
+}
+
 export class DungeonLevel {
   map: Tile[][] = [];
   entities: Entity[] = [];
   depth: number;
 
-  constructor(depth: number) {
+  constructor(depth: number, entityMultiplier = 1, includeStairs = true) {
     this.depth = depth;
     this.generateRoomBasedMap();
-    this.placeStairs();
-    this.spawnEntities(depth);
+    if (includeStairs) this.placeStairs();
+    this.spawnEntities(depth, entityMultiplier);
   }
 
   generateRoomBasedMap() {
@@ -180,15 +193,15 @@ export class DungeonLevel {
     });
   }
 
-  spawnEntities(depth: number) {
-    const enemyCount = 10 + depth * 3;
-    const itemCount = 12 + depth * 2;
+  spawnEntities(depth: number, multiplier = 1) {
+    const enemyCount = Math.floor((10 + depth * 3) * multiplier);
+    const itemCount = Math.floor((12 + depth * 2) * multiplier);
 
     for (let i = 0; i < enemyCount; i++) {
       const def = DEFAULT_ENEMIES[Math.floor(Math.random() * DEFAULT_ENEMIES.length)];
       const scaledHp = Math.floor(def.hp * (1 + (depth - 1) * 0.3));
       this.entities.push({
-        id: `e_${depth}_${i}`,
+        id: `e_${depth}_${i}_${Date.now()}`,
         type: 'enemy',
         pos: this.getRandomEmptyPos(),
         char: def.char,
@@ -202,7 +215,7 @@ export class DungeonLevel {
     for (let i = 0; i < itemCount; i++) {
       const def = DEFAULT_ITEMS[Math.floor(Math.random() * DEFAULT_ITEMS.length)];
       this.entities.push({
-        id: `i_${depth}_${i}`,
+        id: `i_${depth}_${i}_${Date.now()}`,
         type: 'item',
         pos: this.getRandomEmptyPos(),
         char: def.char,
@@ -279,27 +292,62 @@ export class DungeonLevel {
 }
 
 export class GameWorld {
-  levels: Map<number, DungeonLevel> = new Map();
+  playerLevels: Map<string, Map<number, DungeonLevel>> = new Map();
   players: Map<string, PlayerState> = new Map();
   playerDepths: Map<string, number> = new Map();
   messageLog: Map<string, string[]> = new Map();
 
+  rift: DimensionRift | null = null;
+  riftWarning: RiftWarning | null = null;
+  riftTimer: ReturnType<typeof setTimeout> | null = null;
+  onRiftEvent: ((playerIds: string[]) => void) | null = null;
+
   constructor() {
-    this.getOrCreateLevel(1);
     log("Game world initialized", "game");
+    this.scheduleNextRift();
   }
 
-  getOrCreateLevel(depth: number): DungeonLevel {
-    if (!this.levels.has(depth)) {
-      this.levels.set(depth, new DungeonLevel(depth));
-      log(`Generated dungeon level ${depth}`, "game");
+  getOrCreatePlayerLevel(playerId: string, depth: number): DungeonLevel {
+    let levels = this.playerLevels.get(playerId);
+    if (!levels) {
+      levels = new Map();
+      this.playerLevels.set(playerId, levels);
     }
-    return this.levels.get(depth)!;
+    if (!levels.has(depth)) {
+      const level = new DungeonLevel(depth);
+      levels.set(depth, level);
+      log(`Generated dungeon level ${depth} for player ${playerId}`, "game");
+    }
+    return levels.get(depth)!;
+  }
+
+  getActiveLevel(playerId: string): DungeonLevel | null {
+    if (this.rift && this.rift.participants.has(playerId)) {
+      return this.rift.level;
+    }
+    const depth = this.playerDepths.get(playerId);
+    if (depth === undefined) return null;
+    return this.getOrCreatePlayerLevel(playerId, depth);
+  }
+
+  getEffectiveDepth(playerId: string): number {
+    if (this.rift && this.rift.participants.has(playerId)) {
+      return this.rift.depth;
+    }
+    return this.playerDepths.get(playerId) || 1;
+  }
+
+  isInRift(playerId: string): boolean {
+    return this.rift !== null && this.rift.participants.has(playerId);
+  }
+
+  isRiftWarningActive(playerId: string): boolean {
+    return this.riftWarning !== null && this.riftWarning.participants.has(playerId);
   }
 
   addPlayer(id: string, name: string, useOpenSpawn = false): PlayerState {
     const depth = 1;
-    const level = this.getOrCreateLevel(depth);
+    const level = this.getOrCreatePlayerLevel(id, depth);
     const pos = useOpenSpawn ? level.getOpenEmptyPos() : level.getRandomEmptyPos();
 
     const explored: boolean[][] = [];
@@ -331,11 +379,11 @@ export class GameWorld {
     this.messageLog.set(id, [
       "Welcome to the Dungeons of Doom.",
       "Use arrow keys or WASD to move.",
-      "Find the > stairs to descend deeper."
+      "Find the > stairs to descend deeper.",
+      "You are alone in your dimension... for now."
     ]);
 
     this.updatePlayerFOV(id);
-    this.broadcastToDepth(depth, `${name} has entered the dungeon.`, id);
     log(`Player ${name} (${id}) joined at depth ${depth}`, "game");
 
     return player;
@@ -344,6 +392,10 @@ export class GameWorld {
   respawnPlayer(id: string) {
     const player = this.players.get(id);
     if (!player) return;
+
+    if (this.rift && this.rift.participants.has(id)) {
+      this.removeFromRift(id);
+    }
 
     player.dead = false;
     player.maxHp = 20;
@@ -360,7 +412,9 @@ export class GameWorld {
 
     const depth = 1;
     this.playerDepths.set(id, depth);
-    const level = this.getOrCreateLevel(depth);
+
+    this.playerLevels.delete(id);
+    const level = this.getOrCreatePlayerLevel(id, depth);
     player.pos = level.getRandomEmptyPos();
     player.explored = [];
     for (let y = 0; y < MAP_HEIGHT; y++) {
@@ -376,14 +430,19 @@ export class GameWorld {
 
   removePlayer(id: string) {
     const player = this.players.get(id);
-    const depth = this.playerDepths.get(id);
-    if (player && depth) {
-      this.broadcastToDepth(depth, `${player.name} has left the dungeon.`, id);
+    if (player) {
+      if (this.rift && this.rift.participants.has(id)) {
+        this.removeFromRift(id);
+      }
+      if (this.riftWarning && this.riftWarning.participants.has(id)) {
+        this.riftWarning.participants.delete(id);
+      }
       log(`Player ${player.name} (${id}) left`, "game");
     }
     this.players.delete(id);
     this.playerDepths.delete(id);
     this.messageLog.delete(id);
+    this.playerLevels.delete(id);
   }
 
   addMessage(playerId: string, msg: string) {
@@ -393,9 +452,18 @@ export class GameWorld {
     this.messageLog.set(playerId, msgs);
   }
 
-  broadcastToDepth(depth: number, msg: string, excludeId?: string) {
-    for (const [pid, d] of this.playerDepths.entries()) {
-      if (d === depth && pid !== excludeId) {
+  broadcastToRift(msg: string, excludeId?: string) {
+    if (!this.rift) return;
+    for (const pid of this.rift.participants) {
+      if (pid !== excludeId) {
+        this.addMessage(pid, msg);
+      }
+    }
+  }
+
+  broadcastToAll(msg: string, excludeId?: string) {
+    for (const pid of this.players.keys()) {
+      if (pid !== excludeId) {
         this.addMessage(pid, msg);
       }
     }
@@ -403,10 +471,13 @@ export class GameWorld {
 
   movePlayer(id: string, dx: number, dy: number): boolean {
     const player = this.players.get(id);
-    const depth = this.playerDepths.get(id);
-    if (!player || depth === undefined) return false;
+    if (!player || player.dead) return false;
 
-    const level = this.getOrCreateLevel(depth);
+    const level = this.getActiveLevel(id);
+    if (!level) return false;
+
+    const depth = this.getEffectiveDepth(id);
+    const inRift = this.isInRift(id);
     const newX = player.pos.x + dx;
     const newY = player.pos.y + dy;
 
@@ -415,14 +486,14 @@ export class GameWorld {
     const tile = level.map[newY][newX];
     if (!tile.walkable) return false;
 
-    if (player.dead) return false;
-
-    const otherPlayer = Array.from(this.players.entries()).find(
-      ([pid, p]) => pid !== id && this.playerDepths.get(pid) === depth && p.pos.x === newX && p.pos.y === newY
-    );
-    if (otherPlayer) {
-      this.addMessage(id, `You pass by ${otherPlayer[1].name}.`);
-      this.addMessage(otherPlayer[0], `${player.name} passes by you.`);
+    if (inRift) {
+      const otherPlayer = Array.from(this.players.entries()).find(
+        ([pid, p]) => pid !== id && !p.dead && this.isInRift(pid) && p.pos.x === newX && p.pos.y === newY
+      );
+      if (otherPlayer) {
+        this.addMessage(id, `You pass by ${otherPlayer[1].name}.`);
+        this.addMessage(otherPlayer[0], `${player.name} passes by you.`);
+      }
     }
 
     const entityIdx = level.entities.findIndex(e => e.pos.x === newX && e.pos.y === newY);
@@ -481,22 +552,25 @@ export class GameWorld {
         level.entities.splice(entityIdx, 1);
         player.pos = { x: newX, y: newY };
       } else if (entity.type === 'stairs_down') {
-        const newDepth = depth + 1;
+        if (inRift) {
+          this.addMessage(id, "The dimension gate prevents you from descending.");
+          return true;
+        }
+        const currentDepth = this.playerDepths.get(id)!;
+        const newDepth = currentDepth + 1;
         this.addMessage(id, `You descend to depth ${newDepth}...`);
-        this.broadcastToDepth(depth, `${player.name} descended deeper.`, id);
 
         this.playerDepths.set(id, newDepth);
         if (newDepth > player.stats.deepestDepth) {
           player.stats.deepestDepth = newDepth;
         }
-        const newLevel = this.getOrCreateLevel(newDepth);
+        const newLevel = this.getOrCreatePlayerLevel(id, newDepth);
         player.pos = newLevel.getRandomEmptyPos();
         player.explored = [];
         for (let y = 0; y < MAP_HEIGHT; y++) {
           player.explored.push(new Array(MAP_WIDTH).fill(false));
         }
         this.updatePlayerFOV(id);
-        this.broadcastToDepth(newDepth, `${player.name} arrived from above.`, id);
         return true;
       }
     } else {
@@ -508,15 +582,30 @@ export class GameWorld {
     return true;
   }
 
-  tickEnemies(): Set<number> {
-    const affectedDepths = new Set<number>();
+  tickEnemies(): Set<string> {
+    const affectedPlayers = new Set<string>();
     const dirs: [number, number][] = [[0, -1], [0, 1], [-1, 0], [1, 0]];
 
-    for (const [depth, level] of this.levels) {
+    const levelToPlayers = new Map<DungeonLevel, { id: string; player: PlayerState }[]>();
+
+    for (const [pid, player] of this.players) {
+      if (player.dead) continue;
+      const level = this.getActiveLevel(pid);
+      if (!level) continue;
+
+      if (!levelToPlayers.has(level)) {
+        levelToPlayers.set(level, []);
+      }
+      levelToPlayers.get(level)!.push({ id: pid, player });
+    }
+
+    for (const [level, playerInfos] of levelToPlayers) {
+      const isRiftLevel = this.rift && level === this.rift.level;
+      const effectiveDepth = isRiftLevel ? this.rift!.depth : level.depth;
+
       for (const entity of level.entities) {
         if (entity.type !== 'enemy') continue;
         if (entity.char === entity.char.toLowerCase()) continue;
-
         if (Math.random() > 0.3) continue;
 
         const shuffled = [...dirs].sort(() => Math.random() - 0.5);
@@ -530,13 +619,13 @@ export class GameWorld {
           const blocked = level.entities.some(e => e !== entity && e.pos.x === nx && e.pos.y === ny);
           if (blocked) continue;
 
-          const hitPlayer = Array.from(this.players.entries()).find(
-            ([pid, p]) => !p.dead && this.playerDepths.get(pid) === depth && p.pos.x === nx && p.pos.y === ny
+          const hitPlayerInfo = playerInfos.find(
+            pi => !pi.player.dead && pi.player.pos.x === nx && pi.player.pos.y === ny
           );
 
-          if (hitPlayer) {
-            const [pid, p] = hitPlayer;
-            const dmg = Math.floor(Math.random() * 3) + 1 + Math.floor(depth * 0.3);
+          if (hitPlayerInfo) {
+            const { id: pid, player: p } = hitPlayerInfo;
+            const dmg = Math.floor(Math.random() * 3) + 1 + Math.floor(effectiveDepth * 0.3);
             p.hp -= dmg;
             p.stats.damageTaken += dmg;
             this.addMessage(pid, `The ${entity.name} attacks you for ${dmg}!`);
@@ -547,26 +636,219 @@ export class GameWorld {
               p.stats.killedBy = entity.name;
               this.addMessage(pid, `You have been slain by the ${entity.name}...`);
             }
-            affectedDepths.add(depth);
+            for (const pi of playerInfos) {
+              affectedPlayers.add(pi.id);
+            }
             break;
           }
 
           entity.pos = { x: nx, y: ny };
-          affectedDepths.add(depth);
+          for (const pi of playerInfos) {
+            affectedPlayers.add(pi.id);
+          }
           break;
         }
       }
     }
 
-    return affectedDepths;
+    return affectedPlayers;
+  }
+
+  scheduleNextRift() {
+    if (this.riftTimer) clearTimeout(this.riftTimer);
+    const delay = (90 + Math.random() * 90) * 1000;
+    this.riftTimer = setTimeout(() => {
+      this.initiateRiftWarning();
+    }, delay);
+    log(`Next dimension rift in ${Math.round(delay / 1000)}s`, "game");
+  }
+
+  initiateRiftWarning(): string[] {
+    const eligible = Array.from(this.players.entries())
+      .filter(([_, p]) => !p.dead)
+      .map(([id]) => id);
+
+    if (eligible.length < 1) {
+      this.scheduleNextRift();
+      return [];
+    }
+
+    this.riftWarning = {
+      participants: new Set(eligible),
+      ticksLeft: 6
+    };
+
+    for (const pid of eligible) {
+      this.addMessage(pid, "");
+      this.addMessage(pid, ">>> A DIMENSION GATE IS FORMING... <<<");
+      this.addMessage(pid, ">>> Worlds are merging. Prepare yourself! <<<");
+    }
+
+    log(`Dimension rift warning issued to ${eligible.length} players`, "game");
+    this.onRiftEvent?.(eligible);
+    return eligible;
+  }
+
+  openRift(): string[] {
+    if (!this.riftWarning) return [];
+
+    const participants = new Set<string>();
+    for (const pid of this.riftWarning.participants) {
+      const player = this.players.get(pid);
+      if (player && !player.dead) {
+        participants.add(pid);
+      }
+    }
+    this.riftWarning = null;
+
+    if (participants.size < 1) {
+      this.scheduleNextRift();
+      return [];
+    }
+
+    let totalDepth = 0;
+    let count = 0;
+    for (const pid of participants) {
+      totalDepth += this.playerDepths.get(pid) || 1;
+      count++;
+    }
+    const avgDepth = Math.max(1, Math.round(totalDepth / count));
+
+    const riftLevel = new DungeonLevel(avgDepth, 2, false);
+
+    const preRiftState = new Map<string, { depth: number; pos: Position; explored: boolean[][] }>();
+    for (const pid of participants) {
+      const player = this.players.get(pid)!;
+      const depth = this.playerDepths.get(pid)!;
+      preRiftState.set(pid, {
+        depth,
+        pos: { ...player.pos },
+        explored: player.explored.map(row => [...row])
+      });
+
+      player.pos = riftLevel.getRandomEmptyPos();
+      player.explored = [];
+      for (let y = 0; y < MAP_HEIGHT; y++) {
+        player.explored.push(new Array(MAP_WIDTH).fill(false));
+      }
+    }
+
+    const duration = 20 + Math.floor(Math.random() * 31);
+
+    this.rift = {
+      level: riftLevel,
+      participants,
+      turnsRemaining: duration,
+      depth: avgDepth,
+      preRiftState
+    };
+
+    for (const pid of participants) {
+      this.updatePlayerFOV(pid);
+      this.addMessage(pid, "");
+      this.addMessage(pid, ">>> THE DIMENSION GATE HAS OPENED! <<<");
+      if (participants.size > 1) {
+        this.addMessage(pid, `>>> ${participants.size} adventurers share this realm! <<<`);
+      }
+      this.addMessage(pid, ">>> Beware: more monsters prowl these merged worlds! <<<");
+    }
+
+    log(`Dimension rift opened with ${participants.size} participants for ${duration} ticks at depth ${avgDepth}`, "game");
+    return Array.from(participants);
+  }
+
+  closeRift(): string[] {
+    if (!this.rift) return [];
+
+    const affected: string[] = [];
+
+    for (const pid of this.rift.participants) {
+      const player = this.players.get(pid);
+      if (!player) continue;
+
+      affected.push(pid);
+
+      const saved = this.rift.preRiftState.get(pid);
+      if (saved && !player.dead) {
+        this.playerDepths.set(pid, saved.depth);
+        player.pos = saved.pos;
+        player.explored = saved.explored;
+        this.updatePlayerFOV(pid);
+      } else if (player.dead) {
+        continue;
+      }
+
+      this.addMessage(pid, "");
+      this.addMessage(pid, ">>> The dimension gate closes... <<<");
+      this.addMessage(pid, ">>> You return to your own world. <<<");
+    }
+
+    this.rift = null;
+    this.scheduleNextRift();
+
+    log("Dimension rift closed", "game");
+    return affected;
+  }
+
+  removeFromRift(playerId: string) {
+    if (!this.rift) return;
+
+    const player = this.players.get(playerId);
+    const saved = this.rift.preRiftState.get(playerId);
+    if (player && saved && !player.dead) {
+      this.playerDepths.set(playerId, saved.depth);
+      player.pos = saved.pos;
+      player.explored = saved.explored;
+      this.updatePlayerFOV(playerId);
+      this.addMessage(playerId, ">>> You are pulled back to your own dimension. <<<");
+    }
+
+    this.rift.participants.delete(playerId);
+    this.rift.preRiftState.delete(playerId);
+
+    if (this.rift.participants.size === 0) {
+      this.rift = null;
+      this.scheduleNextRift();
+      log("Dimension rift closed (no participants left)", "game");
+    }
+  }
+
+  tickRift(): string[] {
+    if (this.riftWarning) {
+      this.riftWarning.ticksLeft--;
+      if (this.riftWarning.ticksLeft <= 0) {
+        return this.openRift();
+      }
+      return Array.from(this.riftWarning.participants);
+    }
+
+    if (this.rift) {
+      this.rift.turnsRemaining--;
+
+      if (this.rift.turnsRemaining === 10) {
+        this.broadcastToRift(">>> The dimension gate flickers... it will close soon! <<<");
+        return Array.from(this.rift.participants);
+      }
+      if (this.rift.turnsRemaining === 3) {
+        this.broadcastToRift(">>> The dimension gate is collapsing! <<<");
+        return Array.from(this.rift.participants);
+      }
+
+      if (this.rift.turnsRemaining <= 0) {
+        return this.closeRift();
+      }
+    }
+
+    return [];
   }
 
   updatePlayerFOV(id: string) {
     const player = this.players.get(id);
-    const depth = this.playerDepths.get(id);
-    if (!player || depth === undefined) return;
+    if (!player) return;
 
-    const level = this.getOrCreateLevel(depth);
+    const level = this.getActiveLevel(id);
+    if (!level) return;
+
     const px = player.pos.x;
     const py = player.pos.y;
 
@@ -596,23 +878,30 @@ export class GameWorld {
 
   getStateForPlayer(id: string) {
     const player = this.players.get(id);
-    const depth = this.playerDepths.get(id);
-    if (!player || depth === undefined) return null;
+    if (!player) return null;
 
-    const level = this.getOrCreateLevel(depth);
+    const level = this.getActiveLevel(id);
+    if (!level) return null;
+
+    const depth = this.getEffectiveDepth(id);
     const messages = this.messageLog.get(id) || [];
+    const inRift = this.isInRift(id);
+    const riftWarningActive = this.isRiftWarningActive(id);
 
     const visible = this.computeVisible(player.pos, level);
 
-    const otherPlayers = Array.from(this.players.entries())
-      .filter(([pid, _]) => pid !== id && this.playerDepths.get(pid) === depth)
-      .map(([_, p]) => ({
-        name: p.name,
-        pos: p.pos,
-        char: '@',
-        color: 'text-secondary',
-        visible: visible[p.pos.y][p.pos.x]
-      }));
+    let otherPlayers: { name: string; pos: Position; char: string; color: string; visible: boolean }[] = [];
+    if (inRift && this.rift) {
+      otherPlayers = Array.from(this.players.entries())
+        .filter(([pid, p]) => pid !== id && !p.dead && this.rift!.participants.has(pid))
+        .map(([_, p]) => ({
+          name: p.name,
+          pos: p.pos,
+          char: '@',
+          color: 'text-secondary',
+          visible: visible[p.pos.y]?.[p.pos.x] || false
+        }));
+    }
 
     const visibleEntities = level.entities
       .filter(e => visible[e.pos.y][e.pos.x])
@@ -639,7 +928,10 @@ export class GameWorld {
       stats: player.stats,
       messages,
       depth,
-      onlineCount
+      onlineCount,
+      riftActive: inRift,
+      riftWarning: riftWarningActive,
+      riftTurnsLeft: inRift && this.rift ? this.rift.turnsRemaining : undefined
     };
   }
 

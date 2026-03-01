@@ -31,13 +31,6 @@ export async function registerRoutes(
     bot.start();
   }
 
-  setInterval(() => {
-    const affectedDepths = world.tickEnemies();
-    for (const depth of affectedDepths) {
-      broadcastStates(depth);
-    }
-  }, 800);
-
   function sendState(playerId: string) {
     const ws = clients.get(playerId);
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
@@ -48,15 +41,23 @@ export async function registerRoutes(
     }
   }
 
-  function broadcastStates(depth?: number) {
-    for (const [pid] of clients) {
-      if (depth !== undefined) {
-        const pDepth = world.playerDepths.get(pid);
-        if (pDepth !== depth) continue;
-      }
+  world.onRiftEvent = (playerIds: string[]) => {
+    for (const pid of playerIds) {
       sendState(pid);
     }
-  }
+  };
+
+  setInterval(() => {
+    const affectedPlayers = world.tickEnemies();
+    for (const pid of affectedPlayers) {
+      sendState(pid);
+    }
+
+    const riftAffected = world.tickRift();
+    for (const pid of riftAffected) {
+      sendState(pid);
+    }
+  }, 800);
 
   wss.on('connection', (ws) => {
     const playerId = `p_${nextId++}`;
@@ -71,21 +72,20 @@ export async function registerRoutes(
             const name = (msg.name || `Adventurer_${Math.floor(Math.random() * 1000)}`).substring(0, 20);
             world.addPlayer(playerId, name);
             sendState(playerId);
-            const depth = world.playerDepths.get(playerId);
-            if (depth) broadcastStates(depth);
             break;
           }
 
           case 'move': {
             const dx = Math.max(-1, Math.min(1, msg.dx || 0));
             const dy = Math.max(-1, Math.min(1, msg.dy || 0));
-            const prevDepth = world.playerDepths.get(playerId);
             const moved = world.movePlayer(playerId, dx, dy);
             if (moved) {
-              const newDepth = world.playerDepths.get(playerId);
               sendState(playerId);
-              if (prevDepth !== undefined) broadcastStates(prevDepth);
-              if (newDepth !== undefined && newDepth !== prevDepth) broadcastStates(newDepth);
+              if (world.isInRift(playerId) && world.rift) {
+                for (const pid of world.rift.participants) {
+                  if (pid !== playerId) sendState(pid);
+                }
+              }
             }
             break;
           }
@@ -93,7 +93,6 @@ export async function registerRoutes(
           case 'respawn': {
             world.respawnPlayer(playerId);
             sendState(playerId);
-            broadcastStates(1);
             break;
           }
         }
@@ -103,17 +102,13 @@ export async function registerRoutes(
     });
 
     ws.on('close', () => {
-      const depth = world.playerDepths.get(playerId);
       world.removePlayer(playerId);
       clients.delete(playerId);
-      if (depth) broadcastStates(depth);
     });
 
     ws.on('error', () => {
-      const depth = world.playerDepths.get(playerId);
       world.removePlayer(playerId);
       clients.delete(playerId);
-      if (depth) broadcastStates(depth);
     });
   });
 

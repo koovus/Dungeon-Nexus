@@ -147,8 +147,10 @@ export class AIBot {
 
   tick() {
     const player = this.world.players.get(this.id);
+    if (!player) return;
+
     const depth = this.world.playerDepths.get(this.id);
-    if (!player || depth === undefined) return;
+    if (depth === undefined) return;
 
     if (player.dead) {
       this.world.respawnPlayer(this.id);
@@ -162,7 +164,9 @@ export class AIBot {
       return;
     }
 
-    const level = this.world.getOrCreateLevel(depth);
+    const level = this.world.getActiveLevel(this.id);
+    if (!level) return;
+
     const visible = this.world.computeVisible(player.pos, level);
 
     const decision = this.decide(player, level, visible);
@@ -233,8 +237,11 @@ export class AIBot {
     const unexplored = bfsToUnexplored(player.pos, player.explored, level);
     if (unexplored) return { target: unexplored, goal: 'explore' };
 
-    const stairs = level.entities.find(e => e.type === 'stairs_down');
-    if (stairs) return { target: stairs.pos, goal: 'descend' };
+    const inRift = this.world.isInRift(this.id);
+    if (!inRift) {
+      const stairs = level.entities.find(e => e.type === 'stairs_down');
+      if (stairs) return { target: stairs.pos, goal: 'descend' };
+    }
 
     return { target: null, goal: 'idle' };
   }
