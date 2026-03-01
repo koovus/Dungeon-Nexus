@@ -7,17 +7,15 @@ import { Skull, Volume2, VolumeX } from 'lucide-react';
 import {
   initAudio,
   setMuted,
-  isMuted,
   playDungeonMusic,
   playRiftMusic,
-  stopMusic,
+  fadeOutMusic,
   playMetalClang,
   playItemPickup,
   playMonsterGrowl,
   startAmbientSounds,
   stopAmbientSounds,
   stopAll,
-  getCurrentMusicMode,
 } from '@/lib/audioEngine';
 
 function JoinScreen({ onJoin }: { onJoin: (name: string) => void }) {
@@ -170,10 +168,11 @@ function MuteButton() {
     <button
       data-testid="button-mute"
       onClick={() => setMute(!mute)}
-      className="text-primary/50 hover:text-primary transition-colors ml-2"
+      className="border border-primary/30 px-2 py-1 text-primary/70 hover:text-primary hover:border-primary/60 transition-colors flex items-center gap-1.5 text-xs uppercase tracking-wider"
       title={mute ? 'Unmute' : 'Mute'}
     >
-      {mute ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+      {mute ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
+      {mute ? 'Muted' : 'Sound'}
     </button>
   );
 }
@@ -217,22 +216,23 @@ function GameView({
   }, [state.messages.length]);
 
   useEffect(() => {
-    if (state.riftActive && !prevRiftActive.current) {
+    if (state.riftWarning && !prevRiftWarning.current) {
+      fadeOutMusic();
       stopAmbientSounds();
+    }
+    prevRiftWarning.current = !!state.riftWarning;
+  }, [state.riftWarning]);
+
+  useEffect(() => {
+    if (state.riftActive && !prevRiftActive.current) {
       playRiftMusic();
     } else if (!state.riftActive && prevRiftActive.current) {
+      stopAll();
       playDungeonMusic();
       startAmbientSounds();
     }
     prevRiftActive.current = !!state.riftActive;
   }, [state.riftActive]);
-
-  useEffect(() => {
-    if (state.riftWarning && !prevRiftWarning.current && getCurrentMusicMode() === 'dungeon') {
-      stopMusic();
-    }
-    prevRiftWarning.current = !!state.riftWarning;
-  }, [state.riftWarning]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -344,8 +344,8 @@ function GameView({
               HP: {state.player.hp}/{state.player.maxHp}
             </span>
           </div>
-          <div className="text-primary/50 text-sm flex items-center" data-testid="text-depth-info">
-            Depth: {state.depth} | Online: {state.onlineCount}
+          <div className="text-primary/50 text-sm flex items-center gap-3" data-testid="text-depth-info">
+            <span>Depth: {state.depth} | Online: {state.onlineCount}</span>
             <MuteButton />
           </div>
         </header>

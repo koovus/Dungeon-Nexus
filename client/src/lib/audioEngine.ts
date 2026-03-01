@@ -4,11 +4,7 @@ let musicGain: GainNode | null = null;
 let sfxGain: GainNode | null = null;
 let ambientGain: GainNode | null = null;
 
-let dungeonOscillators: OscillatorNode[] = [];
-let dungeonGains: GainNode[] = [];
-let riftOscillators: OscillatorNode[] = [];
-let riftGains: GainNode[] = [];
-let riftBufferSources: AudioBufferSourceNode[] = [];
+let activeMusicNodes: { oscs: OscillatorNode[]; gains: GainNode[]; buffers: AudioBufferSourceNode[]; intervals: ReturnType<typeof setInterval>[] } = { oscs: [], gains: [], buffers: [], intervals: [] };
 
 let ambientInterval: ReturnType<typeof setTimeout> | null = null;
 let ambientFollowUps: ReturnType<typeof setTimeout>[] = [];
@@ -24,7 +20,7 @@ function getCtx(): AudioContext {
     masterGain.connect(ctx.destination);
 
     musicGain = ctx.createGain();
-    musicGain.gain.value = 0.25;
+    musicGain.gain.value = 0.3;
     musicGain.connect(masterGain);
 
     sfxGain = ctx.createGain();
@@ -48,7 +44,6 @@ export function initAudio(): void {
   if (muted && masterGain) {
     masterGain.gain.value = 0;
   }
-
   document.addEventListener('click', resumeCtx);
   document.addEventListener('keydown', resumeCtx);
 }
@@ -72,31 +67,34 @@ export function isMuted(): boolean {
   return muted;
 }
 
-function stopOscillatorGroup(oscs: OscillatorNode[], gains: GainNode[], fadeTime = 0): void {
+function clearMusicNodes(fadeTime = 0): void {
   const c = getCtx();
   const now = c.currentTime;
-  for (const g of gains) {
-    g.gain.cancelScheduledValues(now);
-    if (fadeTime > 0) {
-      g.gain.setValueAtTime(g.gain.value, now);
-      g.gain.linearRampToValueAtTime(0, now + fadeTime);
-    } else {
-      g.gain.setValueAtTime(0, now);
-    }
+
+  for (const g of activeMusicNodes.gains) {
+    try {
+      g.gain.cancelScheduledValues(now);
+      if (fadeTime > 0) {
+        g.gain.setValueAtTime(g.gain.value, now);
+        g.gain.linearRampToValueAtTime(0, now + fadeTime);
+      } else {
+        g.gain.setValueAtTime(0, now);
+      }
+    } catch {}
   }
-  const stopTime = now + fadeTime + 0.05;
-  for (const o of oscs) {
+
+  const stopTime = now + fadeTime + 0.1;
+  for (const o of activeMusicNodes.oscs) {
     try { o.stop(stopTime); } catch {}
   }
-}
-
-function stopBufferSources(sources: AudioBufferSourceNode[], fadeTime = 0): void {
-  const c = getCtx();
-  const now = c.currentTime;
-  const stopTime = now + fadeTime + 0.05;
-  for (const s of sources) {
-    try { s.stop(stopTime); } catch {}
+  for (const b of activeMusicNodes.buffers) {
+    try { b.stop(stopTime); } catch {}
   }
+  for (const iv of activeMusicNodes.intervals) {
+    clearInterval(iv);
+  }
+
+  activeMusicNodes = { oscs: [], gains: [], buffers: [], intervals: [] };
 }
 
 function createNoiseBuffer(duration: number): AudioBuffer {
@@ -111,175 +109,291 @@ function createNoiseBuffer(duration: number): AudioBuffer {
   return buffer;
 }
 
+const MINOR_SCALE = [0, 2, 3, 5, 7, 8, 10];
+
+function midiToFreq(midi: number): number {
+  return 440 * Math.pow(2, (midi - 69) / 12);
+}
+
+function getScaleNote(root: number, degree: number): number {
+  const octave = Math.floor(degree / MINOR_SCALE.length);
+  const idx = ((degree % MINOR_SCALE.length) + MINOR_SCALE.length) % MINOR_SCALE.length;
+  return root + MINOR_SCALE[idx] + octave * 12;
+}
+
 export function playDungeonMusic(): void {
   if (currentMusicMode === 'dungeon') return;
   if (!initialized) return;
 
-  stopAllMusic(0);
+  clearMusicNodes(0);
 
   const c = getCtx();
   const now = c.currentTime;
   currentMusicMode = 'dungeon';
 
-  dungeonOscillators = [];
-  dungeonGains = [];
-
-  const drone1 = c.createOscillator();
-  drone1.type = 'sawtooth';
-  drone1.frequency.value = 55;
-  const g1 = c.createGain();
-  g1.gain.setValueAtTime(0, now);
-  g1.gain.linearRampToValueAtTime(0.12, now + 3);
-  const f1 = c.createBiquadFilter();
-  f1.type = 'lowpass';
-  f1.frequency.value = 200;
-  f1.Q.value = 2;
-  drone1.connect(f1);
-  f1.connect(g1);
-  g1.connect(musicGain!);
-  drone1.start(now);
-  dungeonOscillators.push(drone1);
-  dungeonGains.push(g1);
-
-  const drone2 = c.createOscillator();
-  drone2.type = 'sine';
-  drone2.frequency.value = 82.41;
-  const g2 = c.createGain();
-  g2.gain.setValueAtTime(0, now);
-  g2.gain.linearRampToValueAtTime(0.08, now + 4);
-  drone2.connect(g2);
-  g2.connect(musicGain!);
-  drone2.start(now);
-  dungeonOscillators.push(drone2);
-  dungeonGains.push(g2);
+  const root = 38;
 
   const sub = c.createOscillator();
   sub.type = 'sine';
-  sub.frequency.value = 36.71;
-  const gSub = c.createGain();
-  gSub.gain.setValueAtTime(0, now);
-  gSub.gain.linearRampToValueAtTime(0.1, now + 5);
-  sub.connect(gSub);
-  gSub.connect(musicGain!);
+  sub.frequency.value = midiToFreq(root - 12);
+  const subGain = c.createGain();
+  subGain.gain.setValueAtTime(0, now);
+  subGain.gain.linearRampToValueAtTime(0.12, now + 4);
+  sub.connect(subGain);
+  subGain.connect(musicGain!);
   sub.start(now);
-  dungeonOscillators.push(sub);
-  dungeonGains.push(gSub);
+  activeMusicNodes.oscs.push(sub);
+  activeMusicNodes.gains.push(subGain);
 
-  const lfo = c.createOscillator();
-  lfo.type = 'sine';
-  lfo.frequency.value = 0.08;
-  const lfoGain = c.createGain();
-  lfoGain.gain.value = 15;
-  lfo.connect(lfoGain);
-  lfoGain.connect(f1.frequency);
-  lfo.start(now);
-  dungeonOscillators.push(lfo);
-  dungeonGains.push(lfoGain);
+  const drone = c.createOscillator();
+  drone.type = 'sawtooth';
+  drone.frequency.value = midiToFreq(root);
+  const droneFilter = c.createBiquadFilter();
+  droneFilter.type = 'lowpass';
+  droneFilter.frequency.value = 180;
+  droneFilter.Q.value = 3;
+  const droneGain = c.createGain();
+  droneGain.gain.setValueAtTime(0, now);
+  droneGain.gain.linearRampToValueAtTime(0.08, now + 3);
+  drone.connect(droneFilter);
+  droneFilter.connect(droneGain);
+  droneGain.connect(musicGain!);
+  drone.start(now);
+  activeMusicNodes.oscs.push(drone);
+  activeMusicNodes.gains.push(droneGain);
 
-  const lfo2 = c.createOscillator();
-  lfo2.type = 'triangle';
-  lfo2.frequency.value = 0.03;
-  const lfo2Gain = c.createGain();
-  lfo2Gain.gain.value = 0.04;
-  lfo2.connect(lfo2Gain);
-  lfo2Gain.connect(g1.gain);
-  lfo2.start(now);
-  dungeonOscillators.push(lfo2);
-  dungeonGains.push(lfo2Gain);
+  const filterLfo = c.createOscillator();
+  filterLfo.type = 'sine';
+  filterLfo.frequency.value = 0.06;
+  const filterLfoGain = c.createGain();
+  filterLfoGain.gain.value = 60;
+  filterLfo.connect(filterLfoGain);
+  filterLfoGain.connect(droneFilter.frequency);
+  filterLfo.start(now);
+  activeMusicNodes.oscs.push(filterLfo);
+
+  const fifth = c.createOscillator();
+  fifth.type = 'triangle';
+  fifth.frequency.value = midiToFreq(root + 7);
+  const fifthGain = c.createGain();
+  fifthGain.gain.setValueAtTime(0, now);
+  fifthGain.gain.linearRampToValueAtTime(0.04, now + 6);
+  fifth.connect(fifthGain);
+  fifthGain.connect(musicGain!);
+  fifth.start(now);
+  activeMusicNodes.oscs.push(fifth);
+  activeMusicNodes.gains.push(fifthGain);
+
+  const fifthLfo = c.createOscillator();
+  fifthLfo.type = 'sine';
+  fifthLfo.frequency.value = 0.04;
+  const fifthLfoGain = c.createGain();
+  fifthLfoGain.gain.value = 0.03;
+  fifthLfo.connect(fifthLfoGain);
+  fifthLfoGain.connect(fifthGain.gain);
+  fifthLfo.start(now);
+  activeMusicNodes.oscs.push(fifthLfo);
+
+  const melodyOsc = c.createOscillator();
+  melodyOsc.type = 'sine';
+  melodyOsc.frequency.value = midiToFreq(root + 12);
+  const melodyFilter = c.createBiquadFilter();
+  melodyFilter.type = 'lowpass';
+  melodyFilter.frequency.value = 800;
+  melodyFilter.Q.value = 1;
+  const melodyGain = c.createGain();
+  melodyGain.gain.setValueAtTime(0, now);
+  melodyGain.gain.linearRampToValueAtTime(0.06, now + 5);
+  melodyOsc.connect(melodyFilter);
+  melodyFilter.connect(melodyGain);
+  melodyGain.connect(musicGain!);
+  melodyOsc.start(now);
+  activeMusicNodes.oscs.push(melodyOsc);
+  activeMusicNodes.gains.push(melodyGain);
+
+  const patterns = [
+    [0, 4, 7, 4, 3, 7, 5, 3],
+    [0, 3, 5, 7, 10, 7, 5, 3],
+    [0, 7, 5, 3, 0, -2, 0, 3],
+    [5, 3, 0, 3, 5, 7, 10, 7],
+  ];
+  let patIdx = 0;
+  let noteIdx = 0;
+  const noteInterval = 2800;
+
+  const melodyIv = setInterval(() => {
+    if (currentMusicMode !== 'dungeon') return;
+    const pattern = patterns[patIdx];
+    const degree = pattern[noteIdx];
+    const midi = getScaleNote(root + 12, degree);
+    const freq = midiToFreq(midi);
+
+    const t = c.currentTime;
+    melodyOsc.frequency.setValueAtTime(melodyOsc.frequency.value, t);
+    melodyOsc.frequency.exponentialRampToValueAtTime(freq, t + 0.3);
+
+    melodyGain.gain.cancelScheduledValues(t);
+    melodyGain.gain.setValueAtTime(0.06, t);
+    melodyGain.gain.linearRampToValueAtTime(0.03, t + 2.2);
+
+    noteIdx++;
+    if (noteIdx >= pattern.length) {
+      noteIdx = 0;
+      patIdx = (patIdx + 1) % patterns.length;
+    }
+  }, noteInterval);
+  activeMusicNodes.intervals.push(melodyIv);
+
+  const chordNotes = [
+    [root, root + 3, root + 7],
+    [root - 2, root + 2, root + 5],
+    [root + 3, root + 7, root + 10],
+    [root + 5, root + 8, root + 12],
+  ];
+  let chordIdx = 0;
+
+  const chordOscs: OscillatorNode[] = [];
+  const chordGains: GainNode[] = [];
+  for (let i = 0; i < 3; i++) {
+    const o = c.createOscillator();
+    o.type = 'triangle';
+    o.frequency.value = midiToFreq(chordNotes[0][i]);
+    const g = c.createGain();
+    g.gain.setValueAtTime(0, now);
+    g.gain.linearRampToValueAtTime(0.025, now + 8);
+    const f = c.createBiquadFilter();
+    f.type = 'lowpass';
+    f.frequency.value = 500;
+    o.connect(f);
+    f.connect(g);
+    g.connect(musicGain!);
+    o.start(now);
+    chordOscs.push(o);
+    chordGains.push(g);
+    activeMusicNodes.oscs.push(o);
+    activeMusicNodes.gains.push(g);
+  }
+
+  const chordIv = setInterval(() => {
+    if (currentMusicMode !== 'dungeon') return;
+    chordIdx = (chordIdx + 1) % chordNotes.length;
+    const t = c.currentTime;
+    for (let i = 0; i < 3; i++) {
+      const freq = midiToFreq(chordNotes[chordIdx][i]);
+      chordOscs[i].frequency.setValueAtTime(chordOscs[i].frequency.value, t);
+      chordOscs[i].frequency.exponentialRampToValueAtTime(freq, t + 1.5);
+    }
+  }, noteInterval * 4);
+  activeMusicNodes.intervals.push(chordIv);
+
+  const breathLfo = c.createOscillator();
+  breathLfo.type = 'sine';
+  breathLfo.frequency.value = 0.025;
+  const breathGain = c.createGain();
+  breathGain.gain.value = 0.08;
+  breathLfo.connect(breathGain);
+  breathGain.connect(musicGain!.gain);
+  breathLfo.start(now);
+  activeMusicNodes.oscs.push(breathLfo);
 }
 
 export function playRiftMusic(): void {
   if (currentMusicMode === 'rift') return;
   if (!initialized) return;
 
-  stopOscillatorGroup(dungeonOscillators, dungeonGains, 0);
-  dungeonOscillators = [];
-  dungeonGains = [];
+  clearMusicNodes(0.1);
 
   const c = getCtx();
   const now = c.currentTime;
   currentMusicMode = 'rift';
 
-  riftOscillators = [];
-  riftGains = [];
-  riftBufferSources = [];
-
   const pad1 = c.createOscillator();
   pad1.type = 'sine';
   pad1.frequency.value = 110;
-  pad1.detune.value = -12;
+  pad1.detune.value = -15;
   const gP1 = c.createGain();
   gP1.gain.setValueAtTime(0, now);
-  gP1.gain.linearRampToValueAtTime(0.07, now + 2);
+  gP1.gain.linearRampToValueAtTime(0.06, now + 2);
   pad1.connect(gP1);
   gP1.connect(musicGain!);
   pad1.start(now);
-  riftOscillators.push(pad1);
-  riftGains.push(gP1);
+  activeMusicNodes.oscs.push(pad1);
+  activeMusicNodes.gains.push(gP1);
 
   const pad2 = c.createOscillator();
   pad2.type = 'sine';
-  pad2.frequency.value = 113;
-  pad2.detune.value = 8;
+  pad2.frequency.value = 113.5;
+  pad2.detune.value = 10;
   const gP2 = c.createGain();
   gP2.gain.setValueAtTime(0, now);
-  gP2.gain.linearRampToValueAtTime(0.07, now + 2);
+  gP2.gain.linearRampToValueAtTime(0.06, now + 2);
   pad2.connect(gP2);
   gP2.connect(musicGain!);
   pad2.start(now);
-  riftOscillators.push(pad2);
-  riftGains.push(gP2);
+  activeMusicNodes.oscs.push(pad2);
+  activeMusicNodes.gains.push(gP2);
+
+  const pad3 = c.createOscillator();
+  pad3.type = 'sine';
+  pad3.frequency.value = 164.81;
+  pad3.detune.value = -8;
+  const gP3 = c.createGain();
+  gP3.gain.setValueAtTime(0, now);
+  gP3.gain.linearRampToValueAtTime(0.03, now + 4);
+  pad3.connect(gP3);
+  gP3.connect(musicGain!);
+  pad3.start(now);
+  activeMusicNodes.oscs.push(pad3);
+  activeMusicNodes.gains.push(gP3);
 
   const sweep = c.createOscillator();
   sweep.type = 'sawtooth';
-  sweep.frequency.value = 60;
+  sweep.frequency.value = 55;
   const sweepFilter = c.createBiquadFilter();
   sweepFilter.type = 'bandpass';
   sweepFilter.frequency.value = 300;
-  sweepFilter.Q.value = 8;
+  sweepFilter.Q.value = 10;
   const gSweep = c.createGain();
   gSweep.gain.setValueAtTime(0, now);
-  gSweep.gain.linearRampToValueAtTime(0.04, now + 3);
+  gSweep.gain.linearRampToValueAtTime(0.035, now + 3);
   sweep.connect(sweepFilter);
   sweepFilter.connect(gSweep);
   gSweep.connect(musicGain!);
   sweep.start(now);
-  riftOscillators.push(sweep);
-  riftGains.push(gSweep);
+  activeMusicNodes.oscs.push(sweep);
+  activeMusicNodes.gains.push(gSweep);
 
   const sweepLfo = c.createOscillator();
   sweepLfo.type = 'sine';
-  sweepLfo.frequency.value = 0.05;
+  sweepLfo.frequency.value = 0.04;
   const sweepLfoGain = c.createGain();
-  sweepLfoGain.gain.value = 200;
+  sweepLfoGain.gain.value = 250;
   sweepLfo.connect(sweepLfoGain);
   sweepLfoGain.connect(sweepFilter.frequency);
   sweepLfo.start(now);
-  riftOscillators.push(sweepLfo);
-  riftGains.push(sweepLfoGain);
+  activeMusicNodes.oscs.push(sweepLfo);
 
   const highTone = c.createOscillator();
   highTone.type = 'sine';
   highTone.frequency.value = 880;
   const highGain = c.createGain();
   highGain.gain.setValueAtTime(0, now);
-  highGain.gain.linearRampToValueAtTime(0.015, now + 4);
+  highGain.gain.linearRampToValueAtTime(0.012, now + 5);
   highTone.connect(highGain);
   highGain.connect(musicGain!);
   highTone.start(now);
-  riftOscillators.push(highTone);
-  riftGains.push(highGain);
+  activeMusicNodes.oscs.push(highTone);
+  activeMusicNodes.gains.push(highGain);
 
   const highLfo = c.createOscillator();
   highLfo.type = 'sine';
-  highLfo.frequency.value = 0.15;
+  highLfo.frequency.value = 0.12;
   const highLfoGain = c.createGain();
-  highLfoGain.gain.value = 0.01;
+  highLfoGain.gain.value = 0.008;
   highLfo.connect(highLfoGain);
   highLfoGain.connect(highGain.gain);
   highLfo.start(now);
-  riftOscillators.push(highLfo);
-  riftGains.push(highLfoGain);
+  activeMusicNodes.oscs.push(highLfo);
 
   const noiseBuffer = createNoiseBuffer(2);
   const noiseSrc = c.createBufferSource();
@@ -287,33 +401,48 @@ export function playRiftMusic(): void {
   noiseSrc.loop = true;
   const noiseFilter = c.createBiquadFilter();
   noiseFilter.type = 'bandpass';
-  noiseFilter.frequency.value = 500;
-  noiseFilter.Q.value = 1;
+  noiseFilter.frequency.value = 400;
+  noiseFilter.Q.value = 0.8;
   const noiseGain = c.createGain();
   noiseGain.gain.setValueAtTime(0, now);
-  noiseGain.gain.linearRampToValueAtTime(0.03, now + 3);
+  noiseGain.gain.linearRampToValueAtTime(0.04, now + 3);
   noiseSrc.connect(noiseFilter);
   noiseFilter.connect(noiseGain);
   noiseGain.connect(musicGain!);
   noiseSrc.start(now);
-  riftBufferSources.push(noiseSrc);
-  riftGains.push(noiseGain);
-}
+  activeMusicNodes.buffers.push(noiseSrc);
+  activeMusicNodes.gains.push(noiseGain);
 
-function stopAllMusic(fadeTime: number): void {
-  stopOscillatorGroup(dungeonOscillators, dungeonGains, fadeTime);
-  stopOscillatorGroup(riftOscillators, riftGains, fadeTime);
-  stopBufferSources(riftBufferSources, fadeTime);
-  dungeonOscillators = [];
-  dungeonGains = [];
-  riftOscillators = [];
-  riftGains = [];
-  riftBufferSources = [];
-  currentMusicMode = 'none';
+  const pulseOsc = c.createOscillator();
+  pulseOsc.type = 'sine';
+  pulseOsc.frequency.value = 40;
+  const pulseGain = c.createGain();
+  pulseGain.gain.value = 0;
+  pulseOsc.connect(pulseGain);
+  pulseGain.connect(musicGain!);
+  pulseOsc.start(now);
+  activeMusicNodes.oscs.push(pulseOsc);
+  activeMusicNodes.gains.push(pulseGain);
+
+  const pulseIv = setInterval(() => {
+    if (currentMusicMode !== 'rift') return;
+    const t = c.currentTime;
+    pulseGain.gain.cancelScheduledValues(t);
+    pulseGain.gain.setValueAtTime(0, t);
+    pulseGain.gain.linearRampToValueAtTime(0.06, t + 0.1);
+    pulseGain.gain.exponentialRampToValueAtTime(0.001, t + 1.8);
+  }, 3000 + Math.random() * 2000);
+  activeMusicNodes.intervals.push(pulseIv);
 }
 
 export function stopMusic(): void {
-  stopAllMusic(0.5);
+  clearMusicNodes(0.8);
+  currentMusicMode = 'none';
+}
+
+export function fadeOutMusic(): void {
+  clearMusicNodes(2.0);
+  currentMusicMode = 'none';
 }
 
 export function playMetalClang(): void {
@@ -533,7 +662,8 @@ export function stopAmbientSounds(): void {
 
 export function stopAll(): void {
   stopAmbientSounds();
-  stopAllMusic(0.3);
+  clearMusicNodes(0.3);
+  currentMusicMode = 'none';
 }
 
 export function getCurrentMusicMode(): 'none' | 'dungeon' | 'rift' {
