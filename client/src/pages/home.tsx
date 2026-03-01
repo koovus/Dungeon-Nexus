@@ -3,7 +3,22 @@ import { MAP_WIDTH, MAP_HEIGHT } from '@/lib/gameLogic';
 import type { GameStateSnapshot, PlayerStatsInfo } from '@/lib/gameLogic';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useGameWebSocket } from '@/hooks/useWebSocket';
-import { Skull } from 'lucide-react';
+import { Skull, Volume2, VolumeX } from 'lucide-react';
+import {
+  initAudio,
+  setMuted,
+  isMuted,
+  playDungeonMusic,
+  playRiftMusic,
+  stopMusic,
+  playMetalClang,
+  playItemPickup,
+  playMonsterGrowl,
+  startAmbientSounds,
+  stopAmbientSounds,
+  stopAll,
+  getCurrentMusicMode,
+} from '@/lib/audioEngine';
 
 function JoinScreen({ onJoin }: { onJoin: (name: string) => void }) {
   const [name, setName] = useState('');
@@ -141,6 +156,28 @@ function DeathScreen({ stats, playerName, depth, onRespawn }: {
   );
 }
 
+function MuteButton() {
+  const [mute, setMute] = useState(() => {
+    try { return localStorage.getItem('dungeon-muted') === 'true'; } catch { return false; }
+  });
+
+  useEffect(() => {
+    setMuted(mute);
+    try { localStorage.setItem('dungeon-muted', String(mute)); } catch {}
+  }, [mute]);
+
+  return (
+    <button
+      data-testid="button-mute"
+      onClick={() => setMute(!mute)}
+      className="text-primary/50 hover:text-primary transition-colors ml-2"
+      title={mute ? 'Unmute' : 'Mute'}
+    >
+      {mute ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+    </button>
+  );
+}
+
 function GameView({
   state,
   onMove
@@ -149,6 +186,53 @@ function GameView({
   onMove: (dx: number, dy: number) => void;
 }) {
   const logRef = useRef<HTMLDivElement>(null);
+  const prevMessagesLen = useRef(0);
+  const prevRiftActive = useRef(false);
+  const prevRiftWarning = useRef(false);
+
+  useEffect(() => {
+    playDungeonMusic();
+    startAmbientSounds();
+    return () => {
+      stopAll();
+    };
+  }, []);
+
+  useEffect(() => {
+    const newMessages = state.messages.slice(prevMessagesLen.current);
+    prevMessagesLen.current = state.messages.length;
+
+    for (const msg of newMessages) {
+      const lower = msg.toLowerCase();
+      if (lower.includes('you picked up a')) {
+        if (lower.includes('sword') || lower.includes('shield') || lower.includes('axe') || lower.includes('dagger') || lower.includes('mace') || lower.includes('spear') || lower.includes('hammer')) {
+          playMetalClang();
+        } else {
+          playItemPickup();
+        }
+      } else if (lower.includes('hits you') || lower.includes('attacks you') || lower.includes('bites you') || lower.includes('claws you')) {
+        playMonsterGrowl();
+      }
+    }
+  }, [state.messages.length]);
+
+  useEffect(() => {
+    if (state.riftActive && !prevRiftActive.current) {
+      stopAmbientSounds();
+      playRiftMusic();
+    } else if (!state.riftActive && prevRiftActive.current) {
+      playDungeonMusic();
+      startAmbientSounds();
+    }
+    prevRiftActive.current = !!state.riftActive;
+  }, [state.riftActive]);
+
+  useEffect(() => {
+    if (state.riftWarning && !prevRiftWarning.current && getCurrentMusicMode() === 'dungeon') {
+      stopMusic();
+    }
+    prevRiftWarning.current = !!state.riftWarning;
+  }, [state.riftWarning]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -260,8 +344,9 @@ function GameView({
               HP: {state.player.hp}/{state.player.maxHp}
             </span>
           </div>
-          <div className="text-primary/50 text-sm" data-testid="text-depth-info">
+          <div className="text-primary/50 text-sm flex items-center" data-testid="text-depth-info">
             Depth: {state.depth} | Online: {state.onlineCount}
+            <MuteButton />
           </div>
         </header>
 
@@ -343,6 +428,9 @@ export default function Home() {
   const [joined, setJoined] = useState(false);
 
   const handleJoin = useCallback((name: string) => {
+    initAudio();
+    const savedMute = localStorage.getItem('dungeon-muted') === 'true';
+    if (savedMute) setMuted(true);
     connect(name);
     setJoined(true);
   }, [connect]);

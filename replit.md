@@ -29,6 +29,16 @@ A real-time multiplayer ASCII roguelike MUD where multiple players explore proce
 - AI bots that participate in rifts alongside human players
 - Death respawns player at depth 1 with fresh dungeon
 
+## Audio System
+- `client/src/lib/audioEngine.ts` — Procedural audio engine using Web Audio API (no external audio files)
+- **Dungeon music**: Low droning ambient loop (sawtooth+sine oscillators, LFO-modulated filter), fades in over 3-5s
+- **Rift music**: Eerie space-like atmosphere (detuned beating oscillators, swept bandpass, high sine, filtered noise)
+- **Music transitions**: Rift warning fades dungeon music out; rift active cuts to rift music; rift end fades dungeon music back in
+- **SFX**: Metallic clang (bandpass noise + ring oscillator) for weapon/shield pickups; gentle blip for other items; monster growl (low sawtooth) on enemy attacks
+- **Ambient sounds**: Randomly scheduled every 4-14s — footstep pairs, foot drag (optionally followed by distant growl), distant growl
+- Mute button in game header, persisted in localStorage
+- Audio initialized on join button click (browser autoplay policy)
+
 ## Style
 - Monospace font (Fira Code), terminal green (#00FF00) on black
 - CRT scanline + flicker effects
