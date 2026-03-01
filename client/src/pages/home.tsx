@@ -1,4 +1,5 @@
-import { useEffect, useState, useRef, useCallback, lazy, Suspense } from 'react';
+import { useEffect, useState, useRef, useCallback, lazy, Suspense, Component } from 'react';
+import type { ErrorInfo, ReactNode } from 'react';
 import { MAP_WIDTH, MAP_HEIGHT } from '@/lib/gameLogic';
 import type { GameStateSnapshot, PlayerStatsInfo } from '@/lib/gameLogic';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -6,6 +7,38 @@ import { useGameWebSocket } from '@/hooks/useWebSocket';
 import { Skull, Volume2, VolumeX, Eye, Monitor } from 'lucide-react';
 
 const DungeonView3D = lazy(() => import('@/components/DungeonView3D'));
+
+class View3DErrorBoundary extends Component<{ children: ReactNode; onFallback: () => void }, { hasError: boolean }> {
+  constructor(props: { children: ReactNode; onFallback: () => void }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  static getDerivedStateFromError() { return { hasError: true }; }
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.warn('3D view error:', error, info);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="w-full h-full flex items-center justify-center">
+          <div className="text-center p-8 border border-primary/30 max-w-md">
+            <div className="text-primary/70 uppercase tracking-widest text-sm mb-3">3D Mode Error</div>
+            <div className="text-primary/50 text-xs leading-relaxed mb-4">
+              Something went wrong with the 3D renderer. This may be due to browser limitations.
+            </div>
+            <button
+              onClick={() => { this.setState({ hasError: false }); this.props.onFallback(); }}
+              className="border border-primary/30 px-3 py-1.5 text-primary/70 hover:text-primary hover:border-primary/60 transition-colors text-xs uppercase tracking-wider"
+            >
+              Switch to ASCII
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 import {
   initAudio,
   setMuted,
@@ -419,16 +452,18 @@ function GameView({
                 </div>
               </>
             ) : (
-              <Suspense fallback={
-                <div className="h-full w-full flex items-center justify-center text-primary/50 uppercase tracking-widest text-sm animate-pulse">
-                  Loading 3D view...
-                </div>
-              }>
-                <DungeonView3D state={state} />
-                <div className="absolute bottom-2 right-2 text-xs opacity-40 uppercase tracking-widest z-30">
-                  [WASD] move | 3D mode
-                </div>
-              </Suspense>
+              <View3DErrorBoundary onFallback={() => setViewMode('2d')}>
+                <Suspense fallback={
+                  <div className="h-full w-full flex items-center justify-center text-primary/50 uppercase tracking-widest text-sm animate-pulse">
+                    Loading 3D view...
+                  </div>
+                }>
+                  <DungeonView3D state={state} />
+                  <div className="absolute bottom-2 right-2 text-xs opacity-40 uppercase tracking-widest z-30">
+                    [WASD] move | 3D mode
+                  </div>
+                </Suspense>
+              </View3DErrorBoundary>
             )}
           </div>
 

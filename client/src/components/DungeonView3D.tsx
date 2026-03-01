@@ -1,4 +1,4 @@
-import { useEffect, useRef, useMemo } from 'react';
+import { useEffect, useRef, useMemo, useState } from 'react';
 import * as THREE from 'three';
 import { MAP_WIDTH, MAP_HEIGHT } from '@/lib/gameLogic';
 import type { GameStateSnapshot } from '@/lib/gameLogic';
@@ -152,6 +152,7 @@ interface SceneContext {
 export default function DungeonView3D({ state }: { state: GameStateSnapshot }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<SceneContext | null>(null);
+  const [webglError, setWebglError] = useState(false);
 
   const stateRef = useRef(state);
   stateRef.current = state;
@@ -164,6 +165,13 @@ export default function DungeonView3D({ state }: { state: GameStateSnapshot }) {
     if (!containerRef.current) return;
     const container = containerRef.current;
 
+    const testCanvas = document.createElement('canvas');
+    const gl = testCanvas.getContext('webgl') || testCanvas.getContext('experimental-webgl');
+    if (!gl) {
+      setWebglError(true);
+      return;
+    }
+
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x0a0a15);
     scene.fog = new THREE.FogExp2(0x0a0a15, 0.04);
@@ -171,7 +179,13 @@ export default function DungeonView3D({ state }: { state: GameStateSnapshot }) {
     const camera = new THREE.PerspectiveCamera(60, container.clientWidth / container.clientHeight, 0.1, 100);
     camera.position.set(state.player.pos.x, CAM_OFFSET.y, state.player.pos.y + CAM_OFFSET.z);
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+    let renderer: THREE.WebGLRenderer;
+    try {
+      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+    } catch {
+      setWebglError(true);
+      return;
+    }
     renderer.setSize(container.clientWidth, container.clientHeight);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.shadowMap.enabled = false;
@@ -461,6 +475,19 @@ export default function DungeonView3D({ state }: { state: GameStateSnapshot }) {
       ctx.playerLight.intensity = 1.5;
     }
   }, [state.riftActive]);
+
+  if (webglError) {
+    return (
+      <div className="w-full h-full flex items-center justify-center" data-testid="dungeon-view-3d-error">
+        <div className="text-center p-8 border border-primary/30 max-w-md">
+          <div className="text-primary/70 uppercase tracking-widest text-sm mb-3">3D Mode Unavailable</div>
+          <div className="text-primary/50 text-xs leading-relaxed">
+            WebGL is not supported in this browser. Open the app in a separate browser tab to use 3D mode, or switch back to ASCII view.
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
