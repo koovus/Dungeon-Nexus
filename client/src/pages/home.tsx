@@ -177,17 +177,11 @@ function MuteButton() {
   );
 }
 
-function GameView({
-  state,
-  onMove
-}: {
-  state: GameStateSnapshot;
-  onMove: (dx: number, dy: number) => void;
-}) {
-  const logRef = useRef<HTMLDivElement>(null);
+function AudioController({ state }: { state: GameStateSnapshot }) {
   const prevMessagesLen = useRef(0);
   const prevRiftActive = useRef(false);
   const prevRiftWarning = useRef(false);
+  const prevDead = useRef(false);
 
   useEffect(() => {
     playDungeonMusic();
@@ -198,6 +192,21 @@ function GameView({
   }, []);
 
   useEffect(() => {
+    if (state.dead && !prevDead.current) {
+      stopAll();
+    } else if (!state.dead && prevDead.current) {
+      if (state.riftActive) {
+        playRiftMusic();
+      } else {
+        playDungeonMusic();
+        startAmbientSounds();
+      }
+    }
+    prevDead.current = !!state.dead;
+  }, [state.dead, state.riftActive]);
+
+  useEffect(() => {
+    if (state.dead) return;
     const newMessages = state.messages.slice(prevMessagesLen.current);
     prevMessagesLen.current = state.messages.length;
 
@@ -213,17 +222,19 @@ function GameView({
         playMonsterGrowl();
       }
     }
-  }, [state.messages.length]);
+  }, [state.messages.length, state.dead]);
 
   useEffect(() => {
+    if (state.dead) return;
     if (state.riftWarning && !prevRiftWarning.current) {
       fadeOutMusic();
       stopAmbientSounds();
     }
     prevRiftWarning.current = !!state.riftWarning;
-  }, [state.riftWarning]);
+  }, [state.riftWarning, state.dead]);
 
   useEffect(() => {
+    if (state.dead) return;
     if (state.riftActive && !prevRiftActive.current) {
       playRiftMusic();
     } else if (!state.riftActive && prevRiftActive.current) {
@@ -232,7 +243,19 @@ function GameView({
       startAmbientSounds();
     }
     prevRiftActive.current = !!state.riftActive;
-  }, [state.riftActive]);
+  }, [state.riftActive, state.dead]);
+
+  return null;
+}
+
+function GameView({
+  state,
+  onMove
+}: {
+  state: GameStateSnapshot;
+  onMove: (dx: number, dy: number) => void;
+}) {
+  const logRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -454,21 +477,22 @@ export default function Home() {
     );
   }
 
-  if (gameState.dead && gameState.stats) {
-    return (
-      <DeathScreen
-        stats={gameState.stats}
-        playerName={gameState.player.name}
-        depth={gameState.depth}
-        onRespawn={sendRespawn}
-      />
-    );
-  }
-
   return (
-    <GameView
-      state={gameState}
-      onMove={handleMove}
-    />
+    <>
+      {gameState.dead && gameState.stats ? (
+        <DeathScreen
+          stats={gameState.stats}
+          playerName={gameState.player.name}
+          depth={gameState.depth}
+          onRespawn={sendRespawn}
+        />
+      ) : (
+        <GameView
+          state={gameState}
+          onMove={handleMove}
+        />
+      )}
+      <AudioController state={gameState} />
+    </>
   );
 }

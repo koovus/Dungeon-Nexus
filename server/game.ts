@@ -612,7 +612,7 @@ export class GameWorld {
         if (entity.char === entity.char.toLowerCase()) continue;
 
         const hasInjuredNearby = injuredInRift.length > 0;
-        const actChance = hasInjuredNearby ? 0.8 : 0.3;
+        const actChance = hasInjuredNearby ? 0.95 : (isRiftLevel ? 0.5 : 0.3);
         if (Math.random() > actChance) continue;
 
         let sortedDirs: [number, number][];
@@ -633,6 +633,36 @@ export class GameWorld {
             const distB = Math.abs(entity.pos.x + b[0] - tx) + Math.abs(entity.pos.y + b[1] - ty);
             return distA - distB;
           });
+
+          if (Math.random() < 0.4) {
+            for (const [dx2, dy2] of sortedDirs) {
+              const nx2 = entity.pos.x + dx2;
+              const ny2 = entity.pos.y + dy2;
+              if (nx2 < 0 || nx2 >= MAP_WIDTH || ny2 < 0 || ny2 >= MAP_HEIGHT) continue;
+              if (!level.map[ny2][nx2].walkable) continue;
+              const blocked2 = level.entities.some(e => e !== entity && e.pos.x === nx2 && e.pos.y === ny2);
+              if (blocked2) continue;
+              const hitP = playerInfos.find(pi => !pi.player.dead && pi.player.pos.x === nx2 && pi.player.pos.y === ny2);
+              if (hitP) {
+                const { id: pid2, player: p2 } = hitP;
+                const dmg2 = Math.floor(Math.random() * 3) + 1 + Math.floor(effectiveDepth * 0.3);
+                p2.hp -= dmg2;
+                p2.stats.damageTaken += dmg2;
+                this.addMessage(pid2, `The ${entity.name} lunges at you for ${dmg2}!`);
+                if (p2.hp <= 0) {
+                  p2.hp = 0;
+                  p2.dead = true;
+                  p2.stats.killedBy = entity.name;
+                  this.addMessage(pid2, `You have been slain by the ${entity.name}...`);
+                }
+                for (const pi of playerInfos) affectedPlayers.add(pi.id);
+              } else {
+                entity.pos = { x: nx2, y: ny2 };
+                for (const pi of playerInfos) affectedPlayers.add(pi.id);
+              }
+              break;
+            }
+          }
         } else {
           sortedDirs = [...dirs].sort(() => Math.random() - 0.5);
         }
