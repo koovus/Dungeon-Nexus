@@ -20,7 +20,7 @@ A real-time multiplayer ASCII roguelike MUD where multiple players explore proce
 ## Game Features
 - Procedurally generated room-based dungeons with corridors
 - **Per-player dungeon instances** — each player explores their own private dungeon
-- **Dimension Rift system** — periodic events (every 90-180s) that temporarily merge all players onto a shared map with 2x monsters and items. Rifts last 20-50 enemy ticks, with warning messages, countdown banners, and automatic return to private dungeons when the rift closes.
+- **Dimension Rift system** — periodic events (every 90-180s) that temporarily merge all players onto a shared map with 2x monsters and items. Rifts last 20-50 enemy ticks, with warning messages, countdown banners, and automatic return to private dungeons when the rift closes. During rifts, injured players (HP < max) attract monsters aggressively: enemies act ~80% of ticks (vs 30% normally) and pathfind toward the closest injured player.
 - Fog of war with raycasting FOV
 - Real-time multiplayer via WebSocket (visible during rifts)
 - Combat system with enemy scaling by depth

@@ -603,13 +603,41 @@ export class GameWorld {
       const isRiftLevel = this.rift && level === this.rift.level;
       const effectiveDepth = isRiftLevel ? this.rift!.depth : level.depth;
 
+      const injuredInRift = isRiftLevel
+        ? playerInfos.filter(pi => !pi.player.dead && pi.player.hp < pi.player.maxHp)
+        : [];
+
       for (const entity of level.entities) {
         if (entity.type !== 'enemy') continue;
         if (entity.char === entity.char.toLowerCase()) continue;
-        if (Math.random() > 0.3) continue;
 
-        const shuffled = [...dirs].sort(() => Math.random() - 0.5);
-        for (const [dx, dy] of shuffled) {
+        const hasInjuredNearby = injuredInRift.length > 0;
+        const actChance = hasInjuredNearby ? 0.8 : 0.3;
+        if (Math.random() > actChance) continue;
+
+        let sortedDirs: [number, number][];
+        if (hasInjuredNearby) {
+          let closest = injuredInRift[0];
+          let closestDist = Math.abs(entity.pos.x - closest.player.pos.x) + Math.abs(entity.pos.y - closest.player.pos.y);
+          for (const pi of injuredInRift) {
+            const dist = Math.abs(entity.pos.x - pi.player.pos.x) + Math.abs(entity.pos.y - pi.player.pos.y);
+            if (dist < closestDist) {
+              closest = pi;
+              closestDist = dist;
+            }
+          }
+          const tx = closest.player.pos.x;
+          const ty = closest.player.pos.y;
+          sortedDirs = [...dirs].sort((a, b) => {
+            const distA = Math.abs(entity.pos.x + a[0] - tx) + Math.abs(entity.pos.y + a[1] - ty);
+            const distB = Math.abs(entity.pos.x + b[0] - tx) + Math.abs(entity.pos.y + b[1] - ty);
+            return distA - distB;
+          });
+        } else {
+          sortedDirs = [...dirs].sort(() => Math.random() - 0.5);
+        }
+
+        for (const [dx, dy] of sortedDirs) {
           const nx = entity.pos.x + dx;
           const ny = entity.pos.y + dy;
 
