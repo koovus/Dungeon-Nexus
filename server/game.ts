@@ -738,11 +738,23 @@ export class GameWorld {
 
   scheduleNextRift() {
     if (this.riftTimer) clearTimeout(this.riftTimer);
-    const delay = (90 + Math.random() * 90) * 1000;
+
+    let maxDepth = 0;
+    for (const [pid, player] of this.players) {
+      if (!player.dead) {
+        const d = this.playerDepths.get(pid) || 1;
+        if (d > maxDepth) maxDepth = d;
+      }
+    }
+
+    const delay = maxDepth >= 5
+      ? (30 + Math.random() * 40) * 1000
+      : (90 + Math.random() * 90) * 1000;
+
     this.riftTimer = setTimeout(() => {
       this.initiateRiftWarning();
     }, delay);
-    log(`Next dimension rift in ${Math.round(delay / 1000)}s`, "game");
+    log(`Next dimension rift in ${Math.round(delay / 1000)}s${maxDepth >= 5 ? ' (accelerated)' : ''}`, "game");
   }
 
   initiateRiftWarning(): string[] {
