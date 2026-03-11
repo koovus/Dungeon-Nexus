@@ -43,6 +43,7 @@ export interface PlayerState {
   explored: boolean[][];
   stats: PlayerStats;
   dead: boolean;
+  killStreak: number;
 }
 
 export interface EnemyDef {
@@ -363,6 +364,7 @@ export class GameWorld {
       maxHp: 20,
       explored,
       dead: false,
+      killStreak: 0,
       stats: {
         kills: 0,
         damageDealt: 0,
@@ -400,6 +402,7 @@ export class GameWorld {
     player.dead = false;
     player.maxHp = 20;
     player.hp = player.maxHp;
+    player.killStreak = 0;
     player.stats = {
       kills: 0,
       damageDealt: 0,
@@ -508,14 +511,33 @@ export class GameWorld {
 
         if (entity.hp! <= 0) {
           player.stats.kills++;
+          player.killStreak++;
           player.maxHp += 2;
           player.hp = Math.min(player.hp + 2, player.maxHp);
           this.addMessage(id, `You killed the ${entity.name}. [+2 Max HP]`);
           level.entities.splice(entityIdx, 1);
+
+          if (player.killStreak >= 5) {
+            player.killStreak = 0;
+            const goldCount = 3 + Math.floor(Math.random() * 4);
+            this.addMessage(id, `*** KILL STREAK x5! Gold rains from above! ***`);
+            for (let gi = 0; gi < goldCount; gi++) {
+              const gpos = level.getRandomEmptyPos();
+              level.entities.push({
+                id: `gold_rain_${Date.now()}_${gi}_${Math.random()}`,
+                type: 'item',
+                pos: gpos,
+                char: '$',
+                color: 'text-player',
+                name: 'Gold'
+              });
+            }
+          }
         } else {
           const enemyDmg = Math.floor(Math.random() * 3) + 1 + Math.floor(depth * 0.3);
           player.hp -= enemyDmg;
           player.stats.damageTaken += enemyDmg;
+          player.killStreak = 0;
           this.addMessage(id, `The ${entity.name} hits you for ${enemyDmg}!`);
 
           if (player.hp <= 0) {

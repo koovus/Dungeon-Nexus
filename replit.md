@@ -24,6 +24,7 @@ A real-time multiplayer ASCII roguelike MUD where multiple players explore proce
 - **Lowercase monster HP drain aura** — lowercase-letter enemies (g, o, r, w) passively drain 1-3 HP from any player within 1-3 tile distance each enemy tick. This happens automatically without requiring the monster to move or attack.
 - Fog of war with raycasting FOV
 - Real-time multiplayer via WebSocket (visible during rifts)
+- **Kill streak gold rain** — killing 5 monsters in a row (without taking damage) triggers a gold rain event: 3-6 Gold items spawn at random walkable positions on the map. Streak resets on reward or when the player takes combat damage.
 - Combat system with enemy scaling by depth
 - Items (potions heal, scrolls, gold, weapons)
 - Stairs (`>`) to descend to deeper levels (disabled during rifts)
