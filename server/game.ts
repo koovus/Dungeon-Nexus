@@ -707,6 +707,30 @@ export class GameWorld {
           break;
         }
       }
+
+      for (const entity of level.entities) {
+        if (entity.type !== 'enemy') continue;
+        if (entity.char !== entity.char.toLowerCase()) continue;
+        if (entity.hp <= 0) continue;
+
+        for (const { id: pid, player: p } of playerInfos) {
+          if (p.dead) continue;
+          const dist = Math.abs(entity.pos.x - p.pos.x) + Math.abs(entity.pos.y - p.pos.y);
+          if (dist >= 1 && dist <= 3) {
+            const drain = Math.floor(Math.random() * 3) + 1;
+            p.hp -= drain;
+            p.stats.damageTaken += drain;
+            this.addMessage(pid, `The ${entity.name} drains ${drain} HP from you!`);
+            if (p.hp <= 0) {
+              p.hp = 0;
+              p.dead = true;
+              p.stats.killedBy = entity.name;
+              this.addMessage(pid, `You have been drained of life by the ${entity.name}...`);
+            }
+            affectedPlayers.add(pid);
+          }
+        }
+      }
     }
 
     return affectedPlayers;
