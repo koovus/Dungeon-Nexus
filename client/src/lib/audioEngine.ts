@@ -648,6 +648,71 @@ export function startAmbientSounds(): void {
   scheduleAmbientSound();
 }
 
+export function playBuffActivate(): void {
+  if (!initialized) return;
+  const c = getCtx();
+  const now = c.currentTime;
+
+  const osc1 = c.createOscillator();
+  osc1.type = 'sine';
+  osc1.frequency.setValueAtTime(220, now);
+  osc1.frequency.exponentialRampToValueAtTime(440, now + 0.15);
+  osc1.frequency.exponentialRampToValueAtTime(660, now + 0.35);
+
+  const osc2 = c.createOscillator();
+  osc2.type = 'triangle';
+  osc2.frequency.setValueAtTime(330, now + 0.1);
+  osc2.frequency.exponentialRampToValueAtTime(550, now + 0.3);
+
+  const filter = c.createBiquadFilter();
+  filter.type = 'lowpass';
+  filter.frequency.setValueAtTime(800, now);
+  filter.frequency.linearRampToValueAtTime(2000, now + 0.3);
+  filter.Q.value = 2;
+
+  const g1 = c.createGain();
+  g1.gain.setValueAtTime(0, now);
+  g1.gain.linearRampToValueAtTime(0.15, now + 0.05);
+  g1.gain.setValueAtTime(0.15, now + 0.25);
+  g1.gain.exponentialRampToValueAtTime(0.001, now + 0.6);
+
+  const g2 = c.createGain();
+  g2.gain.setValueAtTime(0, now + 0.1);
+  g2.gain.linearRampToValueAtTime(0.1, now + 0.15);
+  g2.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
+
+  osc1.connect(filter);
+  filter.connect(g1);
+  g1.connect(sfxGain!);
+  osc1.start(now);
+  osc1.stop(now + 0.65);
+
+  osc2.connect(g2);
+  g2.connect(sfxGain!);
+  osc2.start(now + 0.1);
+  osc2.stop(now + 0.55);
+}
+
+export function playBuffExpire(): void {
+  if (!initialized) return;
+  const c = getCtx();
+  const now = c.currentTime;
+
+  const osc = c.createOscillator();
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(500, now);
+  osc.frequency.exponentialRampToValueAtTime(200, now + 0.3);
+
+  const g = c.createGain();
+  g.gain.setValueAtTime(0.12, now);
+  g.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+
+  osc.connect(g);
+  g.connect(sfxGain!);
+  osc.start(now);
+  osc.stop(now + 0.4);
+}
+
 export function stopAmbientSounds(): void {
   ambientActive = false;
   if (ambientInterval) {
