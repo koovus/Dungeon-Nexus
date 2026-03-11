@@ -34,6 +34,13 @@ export interface PlayerStats {
   killedBy: string;
 }
 
+export interface ActiveBuff {
+  type: 'armor' | 'damage';
+  source: string;
+  value: number;
+  turnsLeft: number;
+}
+
 export interface PlayerState {
   id: string;
   name: string;
@@ -44,6 +51,7 @@ export interface PlayerState {
   stats: PlayerStats;
   dead: boolean;
   killStreak: number;
+  buffs: ActiveBuff[];
 }
 
 export interface EnemyDef {
@@ -81,6 +89,7 @@ const DEFAULT_ITEMS: ItemDef[] = [
   { char: ')', name: 'Sword', color: 'text-secondary' },
   { char: '[', name: 'Shield', color: 'text-secondary' },
   { char: '/', name: 'Wand', color: 'text-item' },
+  { char: '}', name: 'Bow', color: 'text-secondary' },
   { char: '%', name: 'Food', color: 'text-item' },
   { char: '"', name: 'Healing Herb', color: 'text-primary' },
 ];
@@ -360,11 +369,12 @@ export class GameWorld {
       id,
       name,
       pos,
-      hp: 20,
-      maxHp: 20,
+      hp: 25,
+      maxHp: 25,
       explored,
       dead: false,
       killStreak: 0,
+      buffs: [],
       stats: {
         kills: 0,
         damageDealt: 0,
@@ -400,9 +410,10 @@ export class GameWorld {
     }
 
     player.dead = false;
-    player.maxHp = 20;
+    player.maxHp = 25;
     player.hp = player.maxHp;
     player.killStreak = 0;
+    player.buffs = [];
     player.stats = {
       kills: 0,
       damageDealt: 0,
@@ -504,10 +515,13 @@ export class GameWorld {
       const entity = level.entities[entityIdx];
 
       if (entity.type === 'enemy') {
-        const dmg = Math.floor(Math.random() * 5) + 1 + Math.floor(depth * 0.5);
+        const dmgBonus = player.buffs.filter(b => b.type === 'damage').reduce((s, b) => s + b.value, 0);
+        const baseDmg = Math.floor(Math.random() * 5) + 1 + Math.floor(depth * 0.5);
+        const dmg = baseDmg + dmgBonus;
         entity.hp! -= dmg;
         player.stats.damageDealt += dmg;
-        this.addMessage(id, `You hit the ${entity.name} for ${dmg} damage!`);
+        const bonusText = dmgBonus > 0 ? ` (+${dmgBonus} enchanted)` : '';
+        this.addMessage(id, `You hit the ${entity.name} for ${dmg} damage!${bonusText}`);
 
         if (entity.hp! <= 0) {
           player.stats.kills++;
@@ -534,11 +548,14 @@ export class GameWorld {
             }
           }
         } else {
-          const enemyDmg = Math.floor(Math.random() * 3) + 1 + Math.floor(depth * 0.3);
+          const armorBonus = player.buffs.filter(b => b.type === 'armor').reduce((s, b) => s + b.value, 0);
+          const rawEnemyDmg = Math.floor(Math.random() * 3) + 1 + Math.floor(depth * 0.3);
+          const enemyDmg = Math.max(1, rawEnemyDmg - armorBonus);
           player.hp -= enemyDmg;
           player.stats.damageTaken += enemyDmg;
           player.killStreak = 0;
-          this.addMessage(id, `The ${entity.name} hits you for ${enemyDmg}!`);
+          const armorText = armorBonus > 0 ? ` (${armorBonus} absorbed)` : '';
+          this.addMessage(id, `The ${entity.name} hits you for ${enemyDmg}!${armorText}`);
 
           if (player.hp <= 0) {
             player.hp = 0;
@@ -570,6 +587,22 @@ export class GameWorld {
             player.hp += heal;
             this.addMessage(id, `The herb restores ${heal} HP!`);
           }
+        } else if (entity.name === 'Sword') {
+          const duration = 8 + Math.floor(Math.random() * 13);
+          player.buffs.push({ type: 'armor', source: 'Sword', value: 2, turnsLeft: duration });
+          this.addMessage(id, `The sword's aura shields you! [Armor +2 for ${duration} turns]`);
+        } else if (entity.name === 'Shield') {
+          const duration = 10 + Math.floor(Math.random() * 16);
+          player.buffs.push({ type: 'armor', source: 'Shield', value: 3, turnsLeft: duration });
+          this.addMessage(id, `The shield hums with protection! [Armor +3 for ${duration} turns]`);
+        } else if (entity.name === 'Bow') {
+          const duration = 8 + Math.floor(Math.random() * 13);
+          player.buffs.push({ type: 'damage', source: 'Bow', value: 1, turnsLeft: duration });
+          this.addMessage(id, `The bow steadies your aim! [Damage +1 for ${duration} turns]`);
+        } else if (entity.name === 'Wand') {
+          const duration = 8 + Math.floor(Math.random() * 13);
+          player.buffs.push({ type: 'damage', source: 'Wand', value: 2, turnsLeft: duration });
+          this.addMessage(id, `The wand crackles with power! [Damage +2 for ${duration} turns]`);
         }
         level.entities.splice(entityIdx, 1);
         player.pos = { x: newX, y: newY };
@@ -600,6 +633,16 @@ export class GameWorld {
     }
 
     player.stats.stepsWalked++;
+
+    for (const buff of player.buffs) {
+      buff.turnsLeft--;
+    }
+    const expired = player.buffs.filter(b => b.turnsLeft <= 0);
+    player.buffs = player.buffs.filter(b => b.turnsLeft > 0);
+    for (const b of expired) {
+      this.addMessage(id, `Your ${b.source}'s enchantment fades.`);
+    }
+
     this.updatePlayerFOV(id);
     return true;
   }
