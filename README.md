@@ -1,6 +1,6 @@
 # Dungeon MUD
 
-A real-time multiplayer ASCII roguelike dungeon crawler built with WebSockets. Explore procedurally generated dungeons, fight monsters, collect loot, and encounter other players through Dimension Rifts — all rendered in classic terminal-style ASCII art.
+A real-time multiplayer ASCII roguelike dungeon crawler built with WebSockets. Explore procedurally generated dungeons, fight monsters, collect loot, and encounter other players through Dimension Rifts — all rendered in classic terminal-style ASCII art with procedural audio.
 
 ```
  ██████╗ ██╗   ██╗███╗   ██╗ ██████╗ ███████╗ ██████╗ ███╗   ██╗
@@ -22,6 +22,7 @@ A real-time multiplayer ASCII roguelike dungeon crawler built with WebSockets. E
 
 ### Dimension Rift System
 - Every 90-180 seconds, a **Dimension Rift** event triggers across all players
+- Once any player reaches **depth 5+**, rifts accelerate to every **30-70 seconds**
 - A warning phase announces the incoming rift with purple UI banners and system log messages
 - After a brief countdown, all living players are merged onto a single shared map
 - The rift level spawns **2x the normal amount of monsters and items**
@@ -30,7 +31,13 @@ A real-time multiplayer ASCII roguelike dungeon crawler built with WebSockets. E
 - Warning messages appear at 10 turns and 3 turns remaining
 - When the rift closes, every player returns to their own private dungeon exactly where they left off
 - Stairs are disabled during rifts to keep everyone on the shared map
-- Edge cases handled: player death during rift, disconnection during rift, respawn during rift
+
+### Rift Aggression
+- During rifts, monsters become significantly more aggressive
+- Enemies act on **95% of ticks** (vs 30% normally) when injured players are nearby
+- Monsters pathfind toward the closest injured player (HP below max)
+- 40% chance of a bonus lunge attack during aggressive pursuit
+- Even without injured targets, rift monsters are more active (50% act chance vs 30%)
 
 ### Combat System
 - Bump-to-attack melee combat against monsters
@@ -39,10 +46,30 @@ A real-time multiplayer ASCII roguelike dungeon crawler built with WebSockets. E
 - Death screen shows full run statistics before respawning
 - HP and max HP fully reset on respawn for a fresh start
 
-### Roaming Monsters
-- **Lowercase monsters** (goblins `g`, orcs `o`, rats `r`, wolves `w`) — stationary, waiting to ambush
-- **Uppercase monsters** (Trolls `T`, Dragons `D`, Skeletons `S`, Zombies `Z`) — actively roam the dungeon and will hunt you down
-- Monster HP scales with depth
+### Monster Types
+
+**Uppercase monsters** — actively roam the dungeon and hunt players:
+| Symbol | Monster | Base HP |
+|--------|---------|---------|
+| `T` | Troll | 18 |
+| `D` | Dragon | 30 |
+| `S` | Skeleton | 10 |
+| `Z` | Zombie | 14 |
+
+**Lowercase monsters** — have an HP drain aura:
+| Symbol | Monster | Base HP | Special |
+|--------|---------|---------|---------|
+| `g` | Goblin | 8 | Drains 1-3 HP within 3 tiles |
+| `o` | Orc | 12 | Drains 1-3 HP within 3 tiles |
+| `r` | Rat | 4 | Drains 1-3 HP within 3 tiles |
+| `w` | Wolf | 6 | Drains 1-3 HP within 3 tiles |
+
+Lowercase monsters passively drain HP from any player within 1-3 tiles every enemy tick — no direct contact needed. Get in, kill them fast, or keep your distance.
+
+### Kill Streak Rewards
+- Kill **5 monsters in a row** without taking combat damage to trigger a **gold rain** event
+- 3-6 Gold items scatter across random positions on the map
+- Streak resets after the reward or when you take damage from an enemy
 
 ### Items & Healing
 | Symbol | Item | Effect |
@@ -67,6 +94,14 @@ A real-time multiplayer ASCII roguelike dungeon crawler built with WebSockets. E
 - Intentionally weaker (12 HP) and passive — they won't steal all the monsters
 - Bots participate in Dimension Rifts alongside human players
 - Auto-respawn on death
+
+### Procedural Audio
+- Fully procedural audio engine using the Web Audio API — no external audio files
+- **Dungeon music**: Low droning ambient loop with evolving filter sweeps
+- **Rift music**: Eerie, detuned atmosphere with swept filters and high-frequency tones
+- **Sound effects**: Metallic clang for weapon/shield pickups, gentle blip for other items, monster growl on enemy attacks
+- **Ambient sounds**: Random footsteps, distant growls, and atmospheric drags
+- Mute button in the game header, preference saved to localStorage
 
 ### Death & Stats
 When you die, a full death screen displays your run statistics:
@@ -101,6 +136,7 @@ Move into a monster to attack it. Move onto an item to pick it up. Move onto sta
 
 - **Frontend:** React, TypeScript, Tailwind CSS v4, Vite, Wouter
 - **Backend:** Node.js, Express, WebSocket (`ws`)
+- **Audio:** Web Audio API (fully procedural, no audio files)
 - **Game Logic:** Server-authoritative — all state lives on the server
 - **No Database:** Game state is ephemeral/session-based
 
@@ -112,6 +148,7 @@ client/
     pages/home.tsx        # Join screen, game view, death screen, rift banners
     hooks/useWebSocket.ts # WebSocket connection & message handling
     lib/gameLogic.ts      # Shared types and constants
+    lib/audioEngine.ts    # Procedural Web Audio API sound engine
     index.css             # CRT effects, color themes, Tailwind config
 
 server/
@@ -144,36 +181,6 @@ npm run dev
 ```
 
 The server starts on port 5000 with both the API and Vite dev server.
-
-## Changelog
-
-### v0.3.0 — Dimension Rift System
-- Refactored multiplayer to use **per-player dungeon instances** — each player now explores their own private dungeon
-- Added **Dimension Rift** event system: periodic events (every 90-180s) that temporarily merge all players onto a shared map
-- Rift levels spawn 2x monsters and items for increased challenge
-- Warning phase with purple UI banners before rifts open
-- Countdown display showing remaining rift turns
-- Warning messages at 10 and 3 turns before rift closes
-- Players return to their private dungeon with full state preserved when the rift closes
-- Stairs disabled during rifts to keep players on the shared map
-- AI bots participate in rifts alongside human players
-- Handles edge cases: death/disconnect/respawn during active rifts
-
-### v0.2.1 — Respawn HP Fix
-- Fixed player HP not resetting on respawn — max HP now resets to 20 for a fresh start
-
-### v0.2.0 — Dependency Update
-- Updated rollup to v2.80.0 per security scan requirements
-
-### v0.1.0 — Initial Release
-- Procedural dungeon generation with rooms and corridors
-- Real-time multiplayer via WebSocket
-- Fog of war with raycasting FOV
-- Combat system with depth-scaled damage
-- Items and healing system
-- AI bot players with BFS pathfinding
-- CRT terminal visual aesthetic
-- Death screen with run statistics
 
 ## License
 
