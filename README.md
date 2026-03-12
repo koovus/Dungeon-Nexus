@@ -43,8 +43,37 @@ A real-time multiplayer ASCII roguelike dungeon crawler built with WebSockets. E
 - Bump-to-attack melee combat against monsters
 - Damage scales with dungeon depth
 - Every kill grants **+2 max HP**, rewarding aggressive play
+- Player starts with **25 HP**
 - Death screen shows full run statistics before respawning
 - HP and max HP fully reset on respawn for a fresh start
+
+### Equipment Buffs
+Picking up equipment grants temporary enchantment buffs that last a random number of turns:
+
+| Symbol | Item | Buff Type | Effect |
+|--------|------|-----------|--------|
+| `)` | Sword | Armor | +2 damage reduction for 8-20 turns |
+| `[` | Shield | Armor | +3 damage reduction for 10-25 turns |
+| `}` | Bow | Damage | +1 attack damage for 8-20 turns |
+| `/` | Wand | Damage | +2 attack damage for 8-20 turns |
+
+- Armor buffs reduce incoming damage (minimum 1 damage per hit)
+- Damage buffs add bonus damage to all attacks
+- Multiple buffs can stack (e.g., Sword + Shield armor)
+- Active buffs display in the header with remaining turns
+- A rising synth tone plays when a buff activates; a descending tone when it fades
+- Combat messages show bonus damage dealt and damage absorbed
+
+### Rest & Heal System
+- Press `.` (period) or `Space` to rest in place
+- After **2 turns** of resting, a message confirms you're recovering
+- After **3+ turns**, you heal **1 HP** per rest turn
+- After **5+ turns**, healing increases to **2 HP** per turn
+- After **8+ turns**, healing increases to **3 HP** per turn
+- **Risk:** Resting attracts lowercase monsters — they creep toward you from increasing range the longer you stay still
+- At **5 turns**, a warning message alerts you that creatures sense your stillness
+- Any movement immediately resets the rest counter
+- A pulsing "Resting..." indicator shows in the header while resting
 
 ### Monster Types
 
@@ -64,7 +93,7 @@ A real-time multiplayer ASCII roguelike dungeon crawler built with WebSockets. E
 | `r` | Rat | 4 | Drains 1-3 HP within 3 tiles |
 | `w` | Wolf | 6 | Drains 1-3 HP within 3 tiles |
 
-Lowercase monsters passively drain HP from any player within 1-3 tiles every enemy tick — no direct contact needed. Get in, kill them fast, or keep your distance.
+Lowercase monsters passively drain HP from any player within 1-3 tiles every enemy tick — no direct contact needed. They are also attracted toward resting players. Get in, kill them fast, or keep your distance.
 
 ### Kill Streak Rewards
 - Kill **5 monsters in a row** without taking combat damage to trigger a **gold rain** event
@@ -79,9 +108,6 @@ Lowercase monsters passively drain HP from any player within 1-3 tiles every ene
 | `"` | Healing Herb | Restores 8 HP |
 | `?` | Magic Scroll | Collectible |
 | `$` | Gold | Collectible |
-| `)` | Sword | Collectible |
-| `[` | Shield | Collectible |
-| `/` | Wand | Collectible |
 
 ### Fog of War
 - Line-of-sight raycasting limits visibility to a radius around the player
@@ -99,7 +125,7 @@ Lowercase monsters passively drain HP from any player within 1-3 tiles every ene
 - Fully procedural audio engine using the Web Audio API — no external audio files
 - **Dungeon music**: Low droning ambient loop with evolving filter sweeps
 - **Rift music**: Eerie, detuned atmosphere with swept filters and high-frequency tones
-- **Sound effects**: Metallic clang for weapon/shield pickups, gentle blip for other items, monster growl on enemy attacks
+- **Sound effects**: Metallic clang for weapon/shield pickups, gentle blip for other items, monster growl on enemy attacks, rising synth for buff activation, descending tone for buff expiry
 - **Ambient sounds**: Random footsteps, distant growls, and atmospheric drags
 - Mute button in the game header, preference saved to localStorage
 
@@ -120,6 +146,8 @@ Press Enter or click to respawn and try again.
 - Color-coded entities: yellow (player), red (enemies), cyan (items), grey (walls)
 - Purple UI banners and map border glow during Dimension Rift events
 - Radial vignette overlay for immersion
+- Active buff indicators with turn counters in the header
+- Pulsing "Resting..." indicator during rest
 
 ## Controls
 
@@ -129,6 +157,7 @@ Press Enter or click to respawn and try again.
 | `S` / `Arrow Down` | Move south |
 | `A` / `Arrow Left` | Move west |
 | `D` / `Arrow Right` | Move east |
+| `.` / `Space` | Rest in place (heal over time) |
 
 Move into a monster to attack it. Move onto an item to pick it up. Move onto stairs (`>`) to descend.
 
@@ -167,6 +196,7 @@ shared/
 |---------------|-------------|
 | `{ type: "join", name }` | Join the game with a name |
 | `{ type: "move", dx, dy }` | Move in a direction (-1, 0, or 1) |
+| `{ type: "rest" }` | Rest in place (heal over time, attracts monsters) |
 | `{ type: "respawn" }` | Respawn after death |
 
 | Server Message | Description |

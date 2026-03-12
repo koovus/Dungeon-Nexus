@@ -59,7 +59,7 @@ function JoinScreen({ onJoin }: { onJoin: (name: string) => void }) {
             <div><span className="text-primary font-bold">&gt;</span> Stairs Down</div>
             <div><span className="text-wall font-bold">#</span> Walls</div>
             <div><span className="text-primary/70 font-bold">. Space</span> Rest</div>
-            <div><span className="text-item font-bold">} / ) [</span> Equipment</div>
+            <div><span className="text-item font-bold">{"}"} / ) [</span> Equipment</div>
           </div>
         </div>
 
