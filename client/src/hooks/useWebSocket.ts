@@ -47,6 +47,12 @@ export function useGameWebSocket() {
     }
   }, []);
 
+  const sendRest = useCallback(() => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: 'rest' }));
+    }
+  }, []);
+
   const sendRespawn = useCallback(() => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({ type: 'respawn' }));
@@ -60,5 +66,5 @@ export function useGameWebSocket() {
     };
   }, []);
 
-  return { gameState, connected, connect, sendMove, sendRespawn };
+  return { gameState, connected, connect, sendMove, sendRest, sendRespawn };
 }

@@ -90,6 +90,19 @@ export async function registerRoutes(
             break;
           }
 
+          case 'rest': {
+            const rested = world.restPlayer(playerId);
+            if (rested) {
+              sendState(playerId);
+              if (world.isInRift(playerId) && world.rift) {
+                for (const pid of world.rift.participants) {
+                  if (pid !== playerId) sendState(pid);
+                }
+              }
+            }
+            break;
+          }
+
           case 'respawn': {
             world.respawnPlayer(playerId);
             sendState(playerId);

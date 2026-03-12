@@ -13,6 +13,8 @@ import {
   playMetalClang,
   playItemPickup,
   playMonsterGrowl,
+  playBuffActivate,
+  playBuffExpire,
   startAmbientSounds,
   stopAmbientSounds,
   stopAll,
@@ -56,6 +58,8 @@ function JoinScreen({ onJoin }: { onJoin: (name: string) => void }) {
             <div><span className="text-item font-bold">! ? $ )</span> Items</div>
             <div><span className="text-primary font-bold">&gt;</span> Stairs Down</div>
             <div><span className="text-wall font-bold">#</span> Walls</div>
+            <div><span className="text-primary/70 font-bold">. Space</span> Rest</div>
+            <div><span className="text-item font-bold">} / ) [</span> Equipment</div>
           </div>
         </div>
 
@@ -220,6 +224,10 @@ function AudioController({ state }: { state: GameStateSnapshot }) {
         }
       } else if (lower.includes('hits you') || lower.includes('attacks you') || lower.includes('bites you') || lower.includes('claws you')) {
         playMonsterGrowl();
+      } else if (lower.includes('aura shields you') || lower.includes('hums with protection') || lower.includes('steadies your aim') || lower.includes('crackles with power')) {
+        playBuffActivate();
+      } else if (lower.includes('enchantment fades')) {
+        playBuffExpire();
       }
     }
   }, [state.messages.length, state.dead]);
@@ -250,15 +258,23 @@ function AudioController({ state }: { state: GameStateSnapshot }) {
 
 function GameView({
   state,
-  onMove
+  onMove,
+  onRest
 }: {
   state: GameStateSnapshot;
   onMove: (dx: number, dy: number) => void;
+  onRest: () => void;
 }) {
   const logRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === '.' || e.key === ' ') {
+        e.preventDefault();
+        onRest();
+        return;
+      }
+
       let dx = 0;
       let dy = 0;
 
@@ -276,7 +292,7 @@ function GameView({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onMove]);
+  }, [onMove, onRest]);
 
   useEffect(() => {
     if (logRef.current) {
@@ -366,6 +382,18 @@ function GameView({
             <span className={state.player.hp <= 5 ? "text-enemy animate-pulse" : "text-primary"} data-testid="text-player-hp">
               HP: {state.player.hp}/{state.player.maxHp}
             </span>
+            {(state.player.buffs?.length ?? 0) > 0 && (
+              <span className="text-xs text-item" data-testid="text-buffs">
+                {state.player.buffs!.map((b, i) => (
+                  <span key={i} className={b.type === 'armor' ? 'text-secondary' : 'text-item'}>
+                    {b.source}({b.turnsLeft}){i < state.player.buffs!.length - 1 ? ' ' : ''}
+                  </span>
+                ))}
+              </span>
+            )}
+            {(state.player.restTurns ?? 0) >= 2 && (
+              <span className="text-xs text-primary/60 animate-pulse" data-testid="text-resting">Resting...</span>
+            )}
           </div>
           <div className="text-primary/50 text-sm flex items-center gap-3" data-testid="text-depth-info">
             <span>Depth: {state.depth} | Online: {state.onlineCount}</span>
@@ -447,7 +475,7 @@ function GameView({
 }
 
 export default function Home() {
-  const { gameState, connected, connect, sendMove, sendRespawn } = useGameWebSocket();
+  const { gameState, connected, connect, sendMove, sendRest, sendRespawn } = useGameWebSocket();
   const [joined, setJoined] = useState(false);
 
   const handleJoin = useCallback((name: string) => {
@@ -461,6 +489,10 @@ export default function Home() {
   const handleMove = useCallback((dx: number, dy: number) => {
     sendMove(dx, dy);
   }, [sendMove]);
+
+  const handleRest = useCallback(() => {
+    sendRest();
+  }, [sendRest]);
 
   if (!joined) {
     return <JoinScreen onJoin={handleJoin} />;
@@ -490,6 +522,7 @@ export default function Home() {
         <GameView
           state={gameState}
           onMove={handleMove}
+          onRest={handleRest}
         />
       )}
       <AudioController state={gameState} />

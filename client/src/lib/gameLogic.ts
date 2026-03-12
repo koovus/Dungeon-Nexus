@@ -44,9 +44,16 @@ export interface PlayerStatsInfo {
   killedBy: string;
 }
 
+export interface ActiveBuff {
+  type: 'armor' | 'damage';
+  source: string;
+  value: number;
+  turnsLeft: number;
+}
+
 export interface GameStateSnapshot {
   map: TileState[][];
-  player: PlayerInfo;
+  player: PlayerInfo & { buffs?: ActiveBuff[]; restTurns?: number };
   entities: EntityInfo[];
   otherPlayers: OtherPlayerInfo[];
   messages: string[];
