@@ -57,6 +57,11 @@ export async function registerRoutes(
     for (const pid of riftAffected) {
       sendState(pid);
     }
+
+    const restAffected = world.tickResting();
+    for (const pid of restAffected) {
+      sendState(pid);
+    }
   }, 800);
 
   wss.on('connection', (ws) => {
@@ -91,14 +96,9 @@ export async function registerRoutes(
           }
 
           case 'rest': {
-            const rested = world.restPlayer(playerId);
-            if (rested) {
+            const started = world.startResting(playerId);
+            if (started) {
               sendState(playerId);
-              if (world.isInRift(playerId) && world.rift) {
-                for (const pid of world.rift.participants) {
-                  if (pid !== playerId) sendState(pid);
-                }
-              }
             }
             break;
           }

@@ -53,6 +53,7 @@ export interface PlayerState {
   killStreak: number;
   buffs: ActiveBuff[];
   restTurns: number;
+  isResting: boolean;
 }
 
 export interface EnemyDef {
@@ -377,6 +378,7 @@ export class GameWorld {
       killStreak: 0,
       buffs: [],
       restTurns: 0,
+      isResting: false,
       stats: {
         kills: 0,
         damageDealt: 0,
@@ -417,6 +419,7 @@ export class GameWorld {
     player.killStreak = 0;
     player.buffs = [];
     player.restTurns = 0;
+    player.isResting = false;
     player.stats = {
       kills: 0,
       damageDealt: 0,
@@ -486,89 +489,97 @@ export class GameWorld {
     }
   }
 
-  restPlayer(id: string): boolean {
+  startResting(id: string): boolean {
     const player = this.players.get(id);
     if (!player || player.dead) return false;
+    if (player.isResting) return false;
+    player.isResting = true;
+    player.restTurns = 0;
+    this.addMessage(id, "You begin to rest...");
+    return true;
+  }
 
-    const level = this.getActiveLevel(id);
-    if (!level) return false;
+  tickResting(): Set<string> {
+    const affected = new Set<string>();
 
-    player.restTurns++;
+    for (const [id, player] of this.players) {
+      if (player.dead || !player.isResting) continue;
 
-    let healAmount = 0;
-    if (player.restTurns >= 3 && player.hp < player.maxHp) {
-      if (player.restTurns >= 8) {
-        healAmount = 3;
-      } else if (player.restTurns >= 5) {
-        healAmount = 2;
-      } else {
-        healAmount = 1;
+      const level = this.getActiveLevel(id);
+      if (!level) continue;
+
+      player.restTurns++;
+      affected.add(id);
+
+      let healAmount = 0;
+      if (player.restTurns >= 3 && player.hp < player.maxHp) {
+        if (player.restTurns >= 8) {
+          healAmount = 3;
+        } else if (player.restTurns >= 5) {
+          healAmount = 2;
+        } else {
+          healAmount = 1;
+        }
+        healAmount = Math.min(healAmount, player.maxHp - player.hp);
+        if (healAmount > 0) {
+          player.hp += healAmount;
+          this.addMessage(id, `You rest and recover ${healAmount} HP. [${player.hp}/${player.maxHp}]`);
+        }
       }
-      healAmount = Math.min(healAmount, player.maxHp - player.hp);
-      if (healAmount > 0) {
-        player.hp += healAmount;
-        this.addMessage(id, `You rest and recover ${healAmount} HP. [${player.hp}/${player.maxHp}]`);
+
+      if (player.restTurns === 2) {
+        this.addMessage(id, "You settle in... your wounds slowly mend.");
+      } else if (player.restTurns === 5) {
+        this.addMessage(id, "Your stillness draws attention from lurking creatures...");
       }
-    }
 
-    if (player.restTurns === 2) {
-      this.addMessage(id, "You settle in to rest... you feel your wounds slowly mending.");
-    } else if (player.restTurns === 5) {
-      this.addMessage(id, "Your stillness draws attention from lurking creatures...");
-    }
+      if (player.restTurns >= 3) {
+        const attractRange = Math.min(8 + player.restTurns, 20);
+        for (const entity of level.entities) {
+          if (entity.type !== 'enemy') continue;
+          if (entity.char !== entity.char.toLowerCase()) continue;
+          if (entity.hp! <= 0) continue;
 
-    if (player.restTurns >= 3) {
-      const attractRange = Math.min(8 + player.restTurns, 20);
-      for (const entity of level.entities) {
-        if (entity.type !== 'enemy') continue;
-        if (entity.char !== entity.char.toLowerCase()) continue;
-        if (entity.hp! <= 0) continue;
+          const dist = Math.abs(entity.pos.x - player.pos.x) + Math.abs(entity.pos.y - player.pos.y);
+          if (dist > attractRange || dist <= 1) continue;
 
-        const dist = Math.abs(entity.pos.x - player.pos.x) + Math.abs(entity.pos.y - player.pos.y);
-        if (dist > attractRange || dist <= 1) continue;
+          const dirs: [number, number][] = [[0, -1], [0, 1], [-1, 0], [1, 0]];
+          const sorted = [...dirs].sort((a, b) => {
+            const distA = Math.abs(entity.pos.x + a[0] - player.pos.x) + Math.abs(entity.pos.y + a[1] - player.pos.y);
+            const distB = Math.abs(entity.pos.x + b[0] - player.pos.x) + Math.abs(entity.pos.y + b[1] - player.pos.y);
+            return distA - distB;
+          });
 
-        const dirs: [number, number][] = [[0, -1], [0, 1], [-1, 0], [1, 0]];
-        const sorted = [...dirs].sort((a, b) => {
-          const distA = Math.abs(entity.pos.x + a[0] - player.pos.x) + Math.abs(entity.pos.y + a[1] - player.pos.y);
-          const distB = Math.abs(entity.pos.x + b[0] - player.pos.x) + Math.abs(entity.pos.y + b[1] - player.pos.y);
-          return distA - distB;
-        });
-
-        for (const [dx, dy] of sorted) {
-          const nx = entity.pos.x + dx;
-          const ny = entity.pos.y + dy;
-          if (nx < 0 || nx >= MAP_WIDTH || ny < 0 || ny >= MAP_HEIGHT) continue;
-          if (!level.map[ny][nx].walkable) continue;
-          const blocked = level.entities.some(e => e !== entity && e.pos.x === nx && e.pos.y === ny);
-          if (blocked) continue;
-          const playerBlocked = Array.from(this.players.values()).some(
-            p => !p.dead && p.pos.x === nx && p.pos.y === ny
-          );
-          if (playerBlocked) continue;
-          entity.pos = { x: nx, y: ny };
-          break;
+          for (const [dx, dy] of sorted) {
+            const nx = entity.pos.x + dx;
+            const ny = entity.pos.y + dy;
+            if (nx < 0 || nx >= MAP_WIDTH || ny < 0 || ny >= MAP_HEIGHT) continue;
+            if (!level.map[ny][nx].walkable) continue;
+            const blocked = level.entities.some(e => e !== entity && e.pos.x === nx && e.pos.y === ny);
+            if (blocked) continue;
+            const playerBlocked = Array.from(this.players.values()).some(
+              p => !p.dead && p.pos.x === nx && p.pos.y === ny
+            );
+            if (playerBlocked) continue;
+            entity.pos = { x: nx, y: ny };
+            break;
+          }
         }
       }
     }
 
-    for (const buff of player.buffs) {
-      buff.turnsLeft--;
-    }
-    const expired = player.buffs.filter(b => b.turnsLeft <= 0);
-    player.buffs = player.buffs.filter(b => b.turnsLeft > 0);
-    for (const b of expired) {
-      this.addMessage(id, `Your ${b.source}'s enchantment fades.`);
-    }
-
-    this.updatePlayerFOV(id);
-    return true;
+    return affected;
   }
 
   movePlayer(id: string, dx: number, dy: number): boolean {
     const player = this.players.get(id);
     if (!player || player.dead) return false;
 
-    player.restTurns = 0;
+    if (player.isResting) {
+      player.isResting = false;
+      player.restTurns = 0;
+      this.addMessage(id, "You stop resting.");
+    }
 
     const level = this.getActiveLevel(id);
     if (!level) return false;
@@ -1164,7 +1175,8 @@ export class GameWorld {
         maxHp: player.maxHp,
         name: player.name,
         buffs: player.buffs,
-        restTurns: player.restTurns
+        restTurns: player.restTurns,
+        isResting: player.isResting
       },
       entities: visibleEntities,
       otherPlayers,

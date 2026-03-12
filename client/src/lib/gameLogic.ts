@@ -53,7 +53,7 @@ export interface ActiveBuff {
 
 export interface GameStateSnapshot {
   map: TileState[][];
-  player: PlayerInfo & { buffs?: ActiveBuff[]; restTurns?: number };
+  player: PlayerInfo & { buffs?: ActiveBuff[]; restTurns?: number; isResting?: boolean };
   entities: EntityInfo[];
   otherPlayers: OtherPlayerInfo[];
   messages: string[];

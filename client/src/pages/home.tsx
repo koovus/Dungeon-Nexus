@@ -391,7 +391,7 @@ function GameView({
                 ))}
               </span>
             )}
-            {(state.player.restTurns ?? 0) >= 2 && (
+            {state.player.isResting && (
               <span className="text-xs text-primary/60 animate-pulse" data-testid="text-resting">Resting...</span>
             )}
           </div>
