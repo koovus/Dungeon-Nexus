@@ -51,6 +51,7 @@ function JoinScreen({ onJoin }: { onJoin: (name: string) => void }) {
 
         <div className="space-y-4 text-sm text-primary/70 mb-6">
           <p className="text-center">A multiplayer roguelike dungeon crawler</p>
+          <p className="text-center text-xs text-primary/40">v0.4.0</p>
           <div className="grid grid-cols-2 gap-2 text-xs border border-primary/20 p-3">
             <div><span className="text-player font-bold">@</span> You</div>
             <div><span className="text-secondary font-bold">@</span> Other Players</div>
@@ -448,6 +449,22 @@ function GameView({
                 </div>
               </ScrollArea>
             </div>
+
+            {state.leaderboard && state.leaderboard.length > 0 && (
+              <div className="border border-primary/30 p-3 shrink-0 max-h-44 flex flex-col" data-testid="leaderboard-panel">
+                <h3 className="uppercase text-xs tracking-widest text-primary/70 mb-2 border-b border-primary/30 pb-1 shrink-0">Leaderboard</h3>
+                <div className="space-y-0.5 text-xs">
+                  {state.leaderboard.map((entry, i) => (
+                    <div key={i} className={`flex items-center gap-2 ${entry.name === state.player.name ? 'text-player' : 'text-primary/70'}`} data-testid={`leaderboard-entry-${i}`}>
+                      <span className="w-4 text-right opacity-50">{i + 1}.</span>
+                      <span className={`flex-1 truncate ${!entry.alive ? 'line-through opacity-40' : ''}`}>{entry.name}</span>
+                      <span className="text-primary/50">D{entry.depth}</span>
+                      <span className="text-enemy/70">{entry.kills}k</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <div className="border border-primary/30 p-3 flex-1 flex flex-col min-h-0 relative">
               <h3 className="uppercase text-xs tracking-widest text-primary/70 mb-2 border-b border-primary/30 pb-1 shrink-0">System Log</h3>

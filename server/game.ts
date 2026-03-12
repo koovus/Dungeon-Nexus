@@ -1187,8 +1187,21 @@ export class GameWorld {
       onlineCount,
       riftActive: inRift,
       riftWarning: riftWarningActive,
-      riftTurnsLeft: inRift && this.rift ? this.rift.turnsRemaining : undefined
+      riftTurnsLeft: inRift && this.rift ? this.rift.turnsRemaining : undefined,
+      leaderboard: this.getLeaderboard()
     };
+  }
+
+  getLeaderboard(): { name: string; depth: number; kills: number; alive: boolean }[] {
+    return Array.from(this.players.values())
+      .map(p => ({
+        name: p.name,
+        depth: p.stats.deepestDepth,
+        kills: p.stats.kills,
+        alive: !p.dead
+      }))
+      .sort((a, b) => b.depth - a.depth || b.kills - a.kills)
+      .slice(0, 10);
   }
 
   computeVisible(pos: Position, level: DungeonLevel): boolean[][] {
