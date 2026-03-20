@@ -692,18 +692,18 @@ function GameView({
               </div>
             )}
 
-            <div className="border border-primary/30 p-3 flex-1 flex flex-col min-h-0 relative">
-              <h3 className="uppercase text-xs tracking-widest text-primary/70 mb-2 border-b border-primary/30 pb-1 shrink-0">System Log</h3>
+            <div className="border border-primary/30 p-3 shrink-0 flex flex-col relative">
+              <h3 className="uppercase text-xs tracking-widest text-primary/70 mb-2 border-b border-primary/30 pb-1 shrink-0">Log</h3>
               <div
                 ref={logRef}
-                className="flex-1 overflow-y-auto font-mono text-sm space-y-0.5 pr-2 min-h-0"
+                className="font-mono text-xs space-y-0.5 pr-1"
               >
-                {state.messages.map((msg, i) => (
+                {state.messages.slice(-8).map((msg, i, arr) => (
                   <div
                     key={i}
-                    className={i === state.messages.length - 1 ? 'text-secondary' : 'text-primary/70'}
+                    className={i === arr.length - 1 ? 'text-secondary' : 'text-primary/50'}
                   >
-                    <span className="opacity-40 mr-1">&gt;</span>{msg}
+                    <span className="opacity-30 mr-1">&gt;</span>{msg}
                   </div>
                 ))}
               </div>
