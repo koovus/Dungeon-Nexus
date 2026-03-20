@@ -3,7 +3,7 @@ import { MAP_WIDTH, MAP_HEIGHT } from '@/lib/gameLogic';
 import type { GameStateSnapshot, PlayerStatsInfo } from '@/lib/gameLogic';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useGameWebSocket } from '@/hooks/useWebSocket';
-import { Skull, Volume2, VolumeX } from 'lucide-react';
+import { Skull, Volume2, VolumeX, ChevronUp, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
 import {
   initAudio,
   setMuted,
@@ -36,8 +36,8 @@ function JoinScreen({ onJoin }: { onJoin: (name: string) => void }) {
 
   return (
     <div className="min-h-screen w-full bg-background text-primary crt flex flex-col items-center justify-center crt-flicker font-mono">
-      <div className="relative z-10 border border-primary/50 p-8 max-w-lg w-full mx-4" style={{ textShadow: '0 0 5px currentColor' }}>
-        <pre className="text-primary text-xs mb-6 text-center leading-tight select-none">
+      <div className="relative z-10 border border-primary/50 p-6 md:p-8 max-w-lg w-full mx-4" style={{ textShadow: '0 0 5px currentColor' }}>
+        <pre className="text-primary text-[7px] sm:text-xs mb-6 text-center leading-tight select-none overflow-hidden">
 {`
  ██████╗ ██╗   ██╗███╗   ██╗ ██████╗ ███████╗ ██████╗ ███╗   ██╗
  ██╔══██╗██║   ██║████╗  ██║██╔════╝ ██╔════╝██╔═══██╗████╗  ██║
@@ -110,13 +110,13 @@ function DeathScreen({ stats, playerName, depth, onRespawn }: {
 
   return (
     <div className="h-screen w-full bg-background text-primary crt flex flex-col items-center justify-center crt-flicker font-mono">
-      <div className="relative z-10 border border-enemy/50 p-8 max-w-lg w-full mx-4 bg-enemy/5">
+      <div className="relative z-10 border border-enemy/50 p-6 md:p-8 max-w-lg w-full mx-4 bg-enemy/5">
         <div className="flex flex-col items-center gap-4 mb-6">
-          <Skull className="w-16 h-16 text-enemy animate-pulse" />
-          <h1 className="text-enemy text-2xl font-bold uppercase tracking-widest" style={{ textShadow: '0 0 10px rgba(255,0,0,0.6)' }}>
+          <Skull className="w-12 h-12 md:w-16 md:h-16 text-enemy animate-pulse" />
+          <h1 className="text-enemy text-xl md:text-2xl font-bold uppercase tracking-widest text-center" style={{ textShadow: '0 0 10px rgba(255,0,0,0.6)' }}>
             You Have Perished
           </h1>
-          <p className="text-enemy/70 text-sm">
+          <p className="text-enemy/70 text-sm text-center">
             {playerName} was slain by {stats.killedBy || 'the dungeon'} on depth {depth}
           </p>
         </div>
@@ -152,7 +152,7 @@ function DeathScreen({ stats, playerName, depth, onRespawn }: {
           className="w-full py-3 border border-primary/50 text-primary uppercase tracking-widest text-sm hover:bg-primary/10 hover:border-primary transition-colors"
           style={{ textShadow: '0 0 5px currentColor' }}
         >
-          Enter the Dungeon Again [Enter]
+          Enter the Dungeon Again
         </button>
       </div>
     </div>
@@ -177,7 +177,7 @@ function MuteButton() {
       title={mute ? 'Unmute' : 'Mute'}
     >
       {mute ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
-      {mute ? 'Muted' : 'Sound'}
+      <span className="hidden sm:inline">{mute ? 'Muted' : 'Sound'}</span>
     </button>
   );
 }
@@ -257,6 +257,57 @@ function AudioController({ state }: { state: GameStateSnapshot }) {
   return null;
 }
 
+function TouchDpad({ onMove, onRest }: { onMove: (dx: number, dy: number) => void; onRest: () => void }) {
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const startRepeat = (action: () => void) => {
+    action();
+    intervalRef.current = setInterval(action, 160);
+  };
+
+  const stopRepeat = () => {
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+  };
+
+  const btnClass = "flex items-center justify-center w-14 h-14 border border-primary/40 bg-primary/10 active:bg-primary/30 text-primary rounded select-none touch-none";
+
+  const dirBtn = (dx: number, dy: number, icon: React.ReactNode) => (
+    <button
+      className={btnClass}
+      onPointerDown={(e) => { e.preventDefault(); startRepeat(() => onMove(dx, dy)); }}
+      onPointerUp={stopRepeat}
+      onPointerLeave={stopRepeat}
+      onPointerCancel={stopRepeat}
+      data-testid={`dpad-${dx === 0 ? (dy < 0 ? 'up' : 'down') : (dx < 0 ? 'left' : 'right')}`}
+    >
+      {icon}
+    </button>
+  );
+
+  return (
+    <div className="grid grid-cols-3 gap-1 p-2 select-none" style={{ width: 'fit-content', margin: '0 auto' }}>
+      <div />
+      {dirBtn(0, -1, <ChevronUp className="w-6 h-6" />)}
+      <div />
+      {dirBtn(-1, 0, <ChevronLeft className="w-6 h-6" />)}
+      <button
+        className={btnClass + " text-primary/60 text-lg font-bold"}
+        onPointerDown={(e) => { e.preventDefault(); onRest(); }}
+        data-testid="dpad-rest"
+      >
+        Z
+      </button>
+      {dirBtn(1, 0, <ChevronRight className="w-6 h-6" />)}
+      <div />
+      {dirBtn(0, 1, <ChevronDown className="w-6 h-6" />)}
+      <div />
+    </div>
+  );
+}
+
 function GameView({
   state,
   onMove,
@@ -267,6 +318,10 @@ function GameView({
   onRest: () => void;
 }) {
   const logRef = useRef<HTMLDivElement>(null);
+  const mapInnerRef = useRef<HTMLDivElement>(null);
+  const mapOuterRef = useRef<HTMLDivElement>(null);
+  const [mapScale, setMapScale] = useState(1);
+  const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 768);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -300,6 +355,23 @@ function GameView({
       logRef.current.scrollTop = logRef.current.scrollHeight;
     }
   }, [state.messages.length]);
+
+  useEffect(() => {
+    const updateScale = () => {
+      const mobile = window.innerWidth < 768;
+      setIsMobile(mobile);
+      if (mapInnerRef.current && mapOuterRef.current) {
+        const outerW = mapOuterRef.current.clientWidth;
+        const innerW = mapInnerRef.current.scrollWidth;
+        if (innerW > 0) {
+          setMapScale(Math.min(1, outerW / innerW));
+        }
+      }
+    };
+    updateScale();
+    window.addEventListener('resize', updateScale);
+    return () => window.removeEventListener('resize', updateScale);
+  }, []);
 
   const entityMap = new Map<string, typeof state.entities[0]>();
   for (const e of state.entities) {
@@ -346,6 +418,134 @@ function GameView({
 
   const visibleEntities = state.entities.filter(e => e.type !== 'stairs_down');
   const visibleOthers = state.otherPlayers.filter(p => p.visible);
+
+  const scaledMapHeight = mapInnerRef.current ? mapInnerRef.current.scrollHeight * mapScale : 'auto';
+
+  if (isMobile) {
+    return (
+      <div className="h-screen w-full bg-background text-primary crt flex flex-col crt-flicker overflow-hidden">
+        <div className="relative z-10 flex flex-col h-full">
+
+          {state.riftWarning && (
+            <div className="border-b border-purple-500/60 bg-purple-500/10 px-2 py-1 text-center animate-pulse shrink-0" data-testid="rift-warning-banner">
+              <span className="text-purple-400 uppercase tracking-widest text-xs font-bold">A Dimension Gate Is Forming...</span>
+            </div>
+          )}
+          {state.riftActive && (
+            <div className="border-b border-purple-500/80 bg-purple-500/15 px-2 py-1 text-center shrink-0" data-testid="rift-active-banner">
+              <span className="text-purple-300 uppercase tracking-widest text-xs font-bold animate-pulse">Dimension Rift Active</span>
+              {state.riftTurnsLeft !== undefined && (
+                <span className="text-purple-400/70 text-xs ml-2">[{state.riftTurnsLeft}t]</span>
+              )}
+            </div>
+          )}
+
+          <header className="border-b border-primary/50 px-2 py-1.5 flex justify-between items-center font-bold shrink-0">
+            <div className="flex gap-2 items-center text-xs">
+              <span className="text-player" data-testid="text-player-name">{state.player.name}</span>
+              <span className={state.player.hp <= 5 ? "text-enemy animate-pulse" : "text-primary"} data-testid="text-player-hp">
+                HP:{state.player.hp}/{state.player.maxHp}
+              </span>
+              {state.player.isResting && (
+                <span className="text-primary/60 animate-pulse" data-testid="text-resting">Zzz</span>
+              )}
+            </div>
+            <div className="flex items-center gap-2 text-xs text-primary/50" data-testid="text-depth-info">
+              <span>D{state.depth}</span>
+              <span>{state.onlineCount} online</span>
+              <MuteButton />
+            </div>
+          </header>
+
+          <div
+            ref={mapOuterRef}
+            className={`shrink-0 w-full overflow-hidden border-b ${state.riftActive ? 'border-purple-500/50' : 'border-primary/20'} relative bg-background`}
+            style={{ height: typeof scaledMapHeight === 'number' ? `${scaledMapHeight}px` : undefined }}
+          >
+            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_40%,rgba(0,0,0,0.4)_100%)] pointer-events-none z-20" />
+            <div
+              style={{
+                transform: `scale(${mapScale})`,
+                transformOrigin: 'top left',
+                width: mapScale < 1 ? `${100 / mapScale}%` : '100%',
+              }}
+            >
+              <div
+                ref={mapInnerRef}
+                className="font-mono text-sm tracking-widest p-1"
+                style={{ textShadow: '0 0 5px currentColor' }}
+                data-testid="game-map"
+              >
+                {renderMap()}
+              </div>
+            </div>
+          </div>
+
+          <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+            <div className="flex gap-2 p-1 border-b border-primary/20 overflow-x-auto shrink-0">
+              {(state.player.buffs?.length ?? 0) > 0 && (
+                <div className="flex gap-1 text-xs" data-testid="text-buffs">
+                  {state.player.buffs!.map((b, i) => (
+                    <span key={i} className={`border border-current/30 px-1 ${b.type === 'armor' ? 'text-secondary' : 'text-item'}`}>
+                      {b.source}({b.turnsLeft})
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="flex flex-1 min-h-0 overflow-hidden">
+              <div className="flex-1 flex flex-col min-h-0 overflow-hidden border-r border-primary/20">
+                <div className="px-2 pt-1 shrink-0">
+                  <span className="text-primary/50 text-xs uppercase tracking-widest">Log</span>
+                </div>
+                <div
+                  ref={logRef}
+                  className="flex-1 overflow-y-auto font-mono text-xs space-y-0.5 px-2 pb-1 min-h-0"
+                >
+                  {state.messages.slice(-20).map((msg, i, arr) => (
+                    <div
+                      key={i}
+                      className={i === arr.length - 1 ? 'text-secondary' : 'text-primary/60'}
+                    >
+                      <span className="opacity-40 mr-1">&gt;</span>{msg}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="w-28 flex flex-col min-h-0 overflow-hidden shrink-0">
+                <div className="px-2 pt-1 shrink-0">
+                  <span className="text-primary/50 text-xs uppercase tracking-widest">Top</span>
+                </div>
+                <div className="flex-1 overflow-y-auto px-1 pb-1 space-y-0.5 min-h-0">
+                  {(state.leaderboard ?? []).slice(0, 6).map((entry, i) => (
+                    <div
+                      key={i}
+                      className={`flex items-center gap-1 text-xs ${entry.name === state.player.name ? 'text-player' : 'text-primary/60'}`}
+                      data-testid={`leaderboard-entry-${i}`}
+                    >
+                      <span className="opacity-50 w-3 text-right shrink-0">{i + 1}.</span>
+                      <span className={`flex-1 truncate text-xs ${!entry.alive ? 'opacity-40' : ''}`}>{entry.name}</span>
+                      <span className="text-primary/40 shrink-0">D{entry.depth}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="shrink-0 border-t border-primary/20 flex items-center justify-between px-2">
+              <TouchDpad onMove={onMove} onRest={onRest} />
+              <div className="text-xs text-primary/30 text-right leading-tight">
+                {state.riftActive ? 'phase @\nto heal' : 'Z = rest'}
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="h-screen w-full bg-background text-primary crt flex flex-col crt-flicker">
