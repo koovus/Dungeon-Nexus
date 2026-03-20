@@ -108,7 +108,7 @@ export interface DimensionRift {
   participants: Set<string>;
   turnsRemaining: number;
   depth: number;
-  preRiftState: Map<string, { depth: number; pos: Position; explored: boolean[][] }>;
+  preRiftState: Map<string, { depth: number; pos: Position; explored: boolean[][]; hp: number; maxHp: number }>;
 }
 
 export interface RiftWarning {
@@ -409,13 +409,20 @@ export class GameWorld {
     const player = this.players.get(id);
     if (!player) return;
 
+    const preRiftSave = this.rift?.preRiftState.get(id);
+
     if (this.rift && this.rift.participants.has(id)) {
-      this.removeFromRift(id);
+      this.rift.participants.delete(id);
+      this.rift.preRiftState.delete(id);
+      if (this.rift.participants.size === 0) {
+        this.rift = null;
+        this.scheduleNextRift();
+      }
     }
 
     player.dead = false;
-    player.maxHp = 25;
-    player.hp = player.maxHp;
+    player.maxHp = preRiftSave ? preRiftSave.maxHp : 25;
+    player.hp = Math.min(Math.ceil(player.maxHp / 2), player.maxHp);
     player.killStreak = 0;
     player.buffs = [];
     player.restTurns = 0;
@@ -426,21 +433,24 @@ export class GameWorld {
       damageTaken: 0,
       itemsCollected: 0,
       stepsWalked: 0,
-      deepestDepth: 1,
+      deepestDepth: preRiftSave ? preRiftSave.depth : 1,
       killedBy: ''
     };
 
-    const depth = 1;
+    const depth = preRiftSave ? preRiftSave.depth : 1;
     this.playerDepths.set(id, depth);
 
-    this.playerLevels.delete(id);
+    if (!preRiftSave) this.playerLevels.delete(id);
     const level = this.getOrCreatePlayerLevel(id, depth);
     player.pos = level.getRandomEmptyPos();
     player.explored = [];
     for (let y = 0; y < MAP_HEIGHT; y++) {
       player.explored.push(new Array(MAP_WIDTH).fill(false));
     }
-    this.messageLog.set(id, [
+    this.messageLog.set(id, preRiftSave ? [
+      `You awaken at depth ${depth}... the rift claimed your body but not your memory.`,
+      `You return weakened but alive. [${player.hp}/${player.maxHp} HP]`
+    ] : [
       "You awaken at the dungeon entrance...",
       "A new journey begins."
     ]);
@@ -976,14 +986,16 @@ export class GameWorld {
 
     const riftLevel = new DungeonLevel(avgDepth, 2, false);
 
-    const preRiftState = new Map<string, { depth: number; pos: Position; explored: boolean[][] }>();
+    const preRiftState = new Map<string, { depth: number; pos: Position; explored: boolean[][]; hp: number; maxHp: number }>();
     for (const pid of participants) {
       const player = this.players.get(pid)!;
       const depth = this.playerDepths.get(pid)!;
       preRiftState.set(pid, {
         depth,
         pos: { ...player.pos },
-        explored: player.explored.map(row => [...row])
+        explored: player.explored.map(row => [...row]),
+        hp: player.hp,
+        maxHp: player.maxHp
       });
 
       player.pos = riftLevel.getRandomEmptyPos();
@@ -1033,6 +1045,8 @@ export class GameWorld {
         this.playerDepths.set(pid, saved.depth);
         player.pos = saved.pos;
         player.explored = saved.explored;
+        player.hp = saved.hp;
+        player.maxHp = saved.maxHp;
         this.updatePlayerFOV(pid);
       } else if (player.dead) {
         continue;
@@ -1059,6 +1073,8 @@ export class GameWorld {
       this.playerDepths.set(playerId, saved.depth);
       player.pos = saved.pos;
       player.explored = saved.explored;
+      player.hp = saved.hp;
+      player.maxHp = saved.maxHp;
       this.updatePlayerFOV(playerId);
       this.addMessage(playerId, ">>> You are pulled back to your own dimension. <<<");
     }
