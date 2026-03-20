@@ -422,7 +422,7 @@ export class GameWorld {
 
     player.dead = false;
     player.maxHp = preRiftSave ? preRiftSave.maxHp : 25;
-    player.hp = Math.min(Math.ceil(player.maxHp / 2), player.maxHp);
+    player.hp = preRiftSave ? Math.min(Math.ceil(player.maxHp / 2), player.maxHp) : player.maxHp;
     player.killStreak = 0;
     player.buffs = [];
     player.restTurns = 0;
