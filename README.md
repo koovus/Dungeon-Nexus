@@ -1,6 +1,6 @@
 # Dungeon MUD
 
-A real-time multiplayer ASCII roguelike dungeon crawler built with WebSockets. Explore procedurally generated dungeons, fight monsters, collect loot, and encounter other players through Dimension Rifts — all rendered in classic terminal-style ASCII art with procedural audio.
+A real-time multiplayer ASCII roguelike dungeon crawler built with WebSockets. Explore procedurally generated dungeons, fight monsters, collect loot, and encounter other players through Dimension Rifts — all rendered in classic terminal-style ASCII art with procedural audio. Fully playable on desktop and mobile.
 
 ```
  ██████╗ ██╗   ██╗███╗   ██╗ ██████╗ ███████╗ ██████╗ ███╗   ██╗
@@ -11,6 +11,8 @@ A real-time multiplayer ASCII roguelike dungeon crawler built with WebSockets. E
  ╚═════╝  ╚═════╝ ╚═╝  ╚═══╝ ╚═════╝ ╚══════╝ ╚═════╝ ╚═╝  ╚═══╝
                        M U D
 ```
+
+**v0.5.0**
 
 ## Features
 
@@ -29,7 +31,7 @@ A real-time multiplayer ASCII roguelike dungeon crawler built with WebSockets. E
 - Players can see and interact with each other during the rift
 - A countdown shows how many turns remain before the rift closes (20-50 enemy ticks)
 - Warning messages appear at 10 turns and 3 turns remaining
-- When the rift closes, every player returns to their own private dungeon exactly where they left off
+- When the rift closes, every player returns to their own private dungeon exactly where they left off — **HP and max HP are fully preserved** through the transition
 - Stairs are disabled during rifts to keep everyone on the shared map
 
 ### Rift Aggression
@@ -39,13 +41,22 @@ A real-time multiplayer ASCII roguelike dungeon crawler built with WebSockets. E
 - 40% chance of a bonus lunge attack during aggressive pursuit
 - Even without injured targets, rift monsters are more active (50% act chance vs 30%)
 
+### Phase Healing
+- During a rift, walking through another player's tile triggers **phase healing**
+- Both players restore **2-4 HP** from the dimensional energy
+- Other players appear red (`@`) during a rift — walk through them to heal
+
+### Rift Death & Respawn
+- If you die during a rift, you respawn at your **pre-rift depth** instead of depth 1
+- Your **max HP is preserved** from before the rift; you recover at half your max HP
+- A special respawn message acknowledges the rift as the cause of death
+
 ### Combat System
 - Bump-to-attack melee combat against monsters
 - Damage scales with dungeon depth
 - Every kill grants **+2 max HP**, rewarding aggressive play
 - Player starts with **25 HP**
 - Death screen shows full run statistics before respawning
-- HP and max HP fully reset on respawn for a fresh start
 
 ### Equipment Buffs
 Picking up equipment grants temporary enchantment buffs that last a random number of turns:
@@ -65,7 +76,7 @@ Picking up equipment grants temporary enchantment buffs that last a random numbe
 - Combat messages show bonus damage dealt and damage absorbed
 
 ### Rest & Heal System
-- Press `.` (period) or `Space` to rest in place
+- Press `.` (period) or `Space` to rest in place (tap `Z` on mobile)
 - After **2 turns** of resting, a message confirms you're recovering
 - After **3+ turns**, you heal **1 HP** per rest turn
 - After **5+ turns**, healing increases to **2 HP** per turn
@@ -73,7 +84,13 @@ Picking up equipment grants temporary enchantment buffs that last a random numbe
 - **Risk:** Resting attracts lowercase monsters — they creep toward you from increasing range the longer you stay still
 - At **5 turns**, a warning message alerts you that creatures sense your stillness
 - Any movement immediately resets the rest counter
-- A pulsing "Resting..." indicator shows in the header while resting
+- A pulsing indicator shows while resting
+
+### Leaderboard
+- Live leaderboard in the sidebar, sorted by deepest depth (kills as tiebreaker)
+- Shows the top 10 players (human + AI)
+- Your own entry is highlighted in yellow
+- Dead/eliminated players shown with strikethrough
 
 ### Monster Types
 
@@ -138,7 +155,7 @@ When you die, a full death screen displays your run statistics:
 - Steps walked
 - What killed you
 
-Press Enter or click to respawn and try again.
+Tap or press Enter to respawn and try again.
 
 ### Visual Style
 - Retro CRT terminal aesthetic with scanline and flicker effects
@@ -147,10 +164,10 @@ Press Enter or click to respawn and try again.
 - Purple UI banners and map border glow during Dimension Rift events
 - Radial vignette overlay for immersion
 - Active buff indicators with turn counters in the header
-- Pulsing "Resting..." indicator during rest
 
 ## Controls
 
+### Desktop
 | Key | Action |
 |-----|--------|
 | `W` / `Arrow Up` | Move north |
@@ -158,6 +175,14 @@ Press Enter or click to respawn and try again.
 | `A` / `Arrow Left` | Move west |
 | `D` / `Arrow Right` | Move east |
 | `.` / `Space` | Rest in place (heal over time) |
+
+### Mobile
+A touch D-pad appears automatically on screens narrower than 768px:
+
+| Button | Action |
+|--------|--------|
+| ↑ ↓ ← → | Move in that direction (hold to repeat) |
+| `Z` (center) | Rest in place |
 
 Move into a monster to attack it. Move onto an item to pick it up. Move onto stairs (`>`) to descend.
 
@@ -174,7 +199,7 @@ Move into a monster to attack it. Move onto an item to pick it up. Move onto sta
 ```
 client/
   src/
-    pages/home.tsx        # Join screen, game view, death screen, rift banners
+    pages/home.tsx        # Join screen, game view, death screen, mobile D-pad, rift banners
     hooks/useWebSocket.ts # WebSocket connection & message handling
     lib/gameLogic.ts      # Shared types and constants
     lib/audioEngine.ts    # Procedural Web Audio API sound engine
@@ -211,6 +236,33 @@ npm run dev
 ```
 
 The server starts on port 5000 with both the API and Vite dev server.
+
+## Changelog
+
+### v0.5.0
+- **Mobile support**: Fully responsive layout with scaled ASCII map and touch D-pad controls
+- **Rift HP preservation**: HP and max HP are saved and restored across rift entry/exit
+- **Rift death respawn**: Dying in a rift now respawns you at your pre-rift depth, not depth 1
+- **Phase healing**: Walking through other players during a rift heals both parties 2-4 HP
+
+### v0.4.0
+- Equipment buff system: Sword, Shield, Bow, Wand grant timed combat buffs
+- Rest/heal mechanic with monster attraction risk
+- Leaderboard panel (depth + kills, top 10)
+- Rift visual overhaul: purple walls, red other-players
+
+### v0.3.0
+- Kill streak rewards (gold rain after 5 consecutive kills)
+- AI bot players with BFS pathfinding
+- Procedural audio engine (dungeon music, rift music, SFX)
+
+### v0.2.0
+- Dimension Rift system
+- Fog of war with raycasting
+- Depth-scaling difficulty
+
+### v0.1.0
+- Initial release: procedural dungeons, combat, items, WebSocket multiplayer
 
 ## License
 
