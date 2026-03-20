@@ -599,8 +599,15 @@ export class GameWorld {
         ([pid, p]) => pid !== id && !p.dead && this.isInRift(pid) && p.pos.x === newX && p.pos.y === newY
       );
       if (otherPlayer) {
-        this.addMessage(id, `You pass by ${otherPlayer[1].name}.`);
-        this.addMessage(otherPlayer[0], `${player.name} passes by you.`);
+        const [opId, opState] = otherPlayer;
+        const healSelf = Math.floor(Math.random() * 3) + 2;
+        const healOther = Math.floor(Math.random() * 3) + 2;
+        const selfGained = Math.min(healSelf, player.maxHp - player.hp);
+        const otherGained = Math.min(healOther, opState.maxHp - opState.hp);
+        if (selfGained > 0) player.hp += selfGained;
+        if (otherGained > 0) opState.hp += otherGained;
+        this.addMessage(id, `You phase through ${opState.name} — the rift energy restores ${selfGained} HP!`);
+        this.addMessage(opId, `${player.name} phases through you — rift energy restores ${otherGained} HP!`);
       }
     }
 
@@ -1151,7 +1158,7 @@ export class GameWorld {
           name: p.name,
           pos: p.pos,
           char: '@',
-          color: 'text-secondary',
+          color: 'text-enemy',
           visible: visible[p.pos.y]?.[p.pos.x] || false
         }));
     }

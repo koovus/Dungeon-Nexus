@@ -328,10 +328,13 @@ function GameView({
           const e = entityMap.get(key)!;
           rowChars.push(<span key={key} className={e.color}>{e.char}</span>);
         } else if (tile.visible) {
-          const color = tile.walkable ? 'text-primary/30' : 'text-wall';
+          const color = tile.walkable
+            ? 'text-primary/30'
+            : state.riftActive ? 'text-purple-500/70' : 'text-wall';
           rowChars.push(<span key={key} className={color}>{tile.char}</span>);
         } else if (tile.explored) {
-          rowChars.push(<span key={key} className="text-primary/10">{tile.char}</span>);
+          const dimColor = state.riftActive && !tile.walkable ? 'text-purple-900/40' : 'text-primary/10';
+          rowChars.push(<span key={key} className={dimColor}>{tile.char}</span>);
         } else {
           rowChars.push(<span key={key} className="text-transparent"> </span>);
         }
@@ -418,7 +421,7 @@ function GameView({
             </div>
 
             <div className="absolute bottom-2 right-2 text-xs opacity-40 uppercase tracking-widest z-30">
-              [WASD] move
+              {state.riftActive ? '[RIFT] phase through @ to heal' : '[WASD] move · [.] rest'}
             </div>
           </div>
 
