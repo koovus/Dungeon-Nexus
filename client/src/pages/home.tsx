@@ -398,12 +398,13 @@ function GameView({
         }
       }
     };
+    const onOrientationChange = () => setTimeout(updateScale, 150);
     updateScale();
     window.addEventListener('resize', updateScale);
-    window.addEventListener('orientationchange', () => setTimeout(updateScale, 100));
+    window.addEventListener('orientationchange', onOrientationChange);
     return () => {
       window.removeEventListener('resize', updateScale);
-      window.removeEventListener('orientationchange', updateScale);
+      window.removeEventListener('orientationchange', onOrientationChange);
     };
   }, []);
 
