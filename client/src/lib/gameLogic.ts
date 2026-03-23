@@ -65,4 +65,8 @@ export interface GameStateSnapshot {
   riftWarning?: boolean;
   riftTurnsLeft?: number;
   leaderboard?: { name: string; depth: number; kills: number; alive: boolean }[];
+  observing?: boolean;
+  observedName?: string;
+  observedIdx?: number;
+  observedCount?: number;
 }

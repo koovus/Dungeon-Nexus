@@ -20,6 +20,7 @@ export async function registerRoutes(
   });
 
   const clients = new Map<string, WebSocket>();
+  const observers = new Map<string, { ws: WebSocket; targetIdx: number }>();
   let nextId = 1;
 
   const aiBots: AIBot[] = [];
@@ -29,6 +30,43 @@ export async function registerRoutes(
   }
   for (const bot of aiBots) {
     bot.start();
+  }
+
+  function getAiBotIds(): string[] {
+    return aiBots.map(b => b.id);
+  }
+
+  function getLiveAiBotId(targetIdx: number): { id: string; idx: number } | null {
+    const botIds = getAiBotIds();
+    if (botIds.length === 0) return null;
+    for (let i = 0; i < botIds.length; i++) {
+      const idx = (targetIdx + i) % botIds.length;
+      const p = world.players.get(botIds[idx]);
+      if (p && !p.dead) return { id: botIds[idx], idx };
+    }
+    const idx = targetIdx % botIds.length;
+    return { id: botIds[idx], idx };
+  }
+
+  function sendObserverState(obsId: string) {
+    const obs = observers.get(obsId);
+    if (!obs || obs.ws.readyState !== WebSocket.OPEN) return;
+    const result = getLiveAiBotId(obs.targetIdx);
+    if (!result) return;
+    obs.targetIdx = result.idx;
+    const state = world.getStateForPlayer(result.id);
+    if (!state) return;
+    const target = world.players.get(result.id);
+    obs.ws.send(JSON.stringify({
+      type: 'state',
+      data: {
+        ...state,
+        observing: true,
+        observedName: target?.name || 'AI',
+        observedIdx: result.idx,
+        observedCount: aiBots.length,
+      }
+    }));
   }
 
   function sendState(playerId: string) {
@@ -44,6 +82,9 @@ export async function registerRoutes(
   world.onRiftEvent = (playerIds: string[]) => {
     for (const pid of playerIds) {
       sendState(pid);
+    }
+    for (const obsId of observers.keys()) {
+      sendObserverState(obsId);
     }
   };
 
@@ -62,11 +103,15 @@ export async function registerRoutes(
     for (const pid of restAffected) {
       sendState(pid);
     }
+
+    for (const obsId of observers.keys()) {
+      sendObserverState(obsId);
+    }
   }, 800);
 
   wss.on('connection', (ws) => {
-    const playerId = `p_${nextId++}`;
-    clients.set(playerId, ws);
+    const connId = `p_${nextId++}`;
+    clients.set(connId, ws);
 
     ws.on('message', (raw) => {
       try {
@@ -75,20 +120,35 @@ export async function registerRoutes(
         switch (msg.type) {
           case 'join': {
             const name = (msg.name || `Adventurer_${Math.floor(Math.random() * 1000)}`).substring(0, 20);
-            world.addPlayer(playerId, name);
-            sendState(playerId);
+            world.addPlayer(connId, name);
+            sendState(connId);
+            break;
+          }
+
+          case 'observe': {
+            observers.set(connId, { ws, targetIdx: 0 });
+            sendObserverState(connId);
+            break;
+          }
+
+          case 'observe_cycle': {
+            const obs = observers.get(connId);
+            if (obs) {
+              obs.targetIdx = (obs.targetIdx + 1) % Math.max(1, aiBots.length);
+              sendObserverState(connId);
+            }
             break;
           }
 
           case 'move': {
             const dx = Math.max(-1, Math.min(1, msg.dx || 0));
             const dy = Math.max(-1, Math.min(1, msg.dy || 0));
-            const moved = world.movePlayer(playerId, dx, dy);
+            const moved = world.movePlayer(connId, dx, dy);
             if (moved) {
-              sendState(playerId);
-              if (world.isInRift(playerId) && world.rift) {
+              sendState(connId);
+              if (world.isInRift(connId) && world.rift) {
                 for (const pid of world.rift.participants) {
-                  if (pid !== playerId) sendState(pid);
+                  if (pid !== connId) sendState(pid);
                 }
               }
             }
@@ -96,16 +156,16 @@ export async function registerRoutes(
           }
 
           case 'rest': {
-            const started = world.startResting(playerId);
+            const started = world.startResting(connId);
             if (started) {
-              sendState(playerId);
+              sendState(connId);
             }
             break;
           }
 
           case 'respawn': {
-            world.respawnPlayer(playerId);
-            sendState(playerId);
+            world.respawnPlayer(connId);
+            sendState(connId);
             break;
           }
         }
@@ -115,13 +175,21 @@ export async function registerRoutes(
     });
 
     ws.on('close', () => {
-      world.removePlayer(playerId);
-      clients.delete(playerId);
+      if (observers.has(connId)) {
+        observers.delete(connId);
+      } else {
+        world.removePlayer(connId);
+      }
+      clients.delete(connId);
     });
 
     ws.on('error', () => {
-      world.removePlayer(playerId);
-      clients.delete(playerId);
+      if (observers.has(connId)) {
+        observers.delete(connId);
+      } else {
+        world.removePlayer(connId);
+      }
+      clients.delete(connId);
     });
   });
 

@@ -21,7 +21,7 @@ import {
   getAudioDiagnostics,
 } from '@/lib/audioEngine';
 
-function JoinScreen({ onJoin }: { onJoin: (name: string) => void }) {
+function JoinScreen({ onJoin, onObserve }: { onJoin: (name: string) => void; onObserve: () => void }) {
   const [name, setName] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -86,17 +86,26 @@ function JoinScreen({ onJoin }: { onJoin: (name: string) => void }) {
           >
             Enter the Dungeon
           </button>
+          <button
+            data-testid="button-observe"
+            type="button"
+            onClick={onObserve}
+            className="w-full border border-primary/20 px-4 py-2 text-primary/50 uppercase tracking-widest text-xs hover:text-primary/80 hover:border-primary/40 transition-colors"
+          >
+            Watch the AI Play
+          </button>
         </form>
       </div>
     </div>
   );
 }
 
-function DeathScreen({ stats, playerName, depth, onRespawn }: {
+function DeathScreen({ stats, playerName, depth, onRespawn, onObserve }: {
   stats: PlayerStatsInfo;
   playerName: string;
   depth: number;
   onRespawn: () => void;
+  onObserve: () => void;
 }) {
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
@@ -147,14 +156,23 @@ function DeathScreen({ stats, playerName, depth, onRespawn }: {
           </div>
         </div>
 
-        <button
-          data-testid="button-respawn"
-          onClick={onRespawn}
-          className="w-full py-3 border border-primary/50 text-primary uppercase tracking-widest text-sm hover:bg-primary/10 hover:border-primary transition-colors"
-          style={{ textShadow: '0 0 5px currentColor' }}
-        >
-          Enter the Dungeon Again
-        </button>
+        <div className="space-y-2">
+          <button
+            data-testid="button-respawn"
+            onClick={onRespawn}
+            className="w-full py-3 border border-primary/50 text-primary uppercase tracking-widest text-sm hover:bg-primary/10 hover:border-primary transition-colors"
+            style={{ textShadow: '0 0 5px currentColor' }}
+          >
+            Enter the Dungeon Again
+          </button>
+          <button
+            data-testid="button-observe-from-death"
+            onClick={onObserve}
+            className="w-full py-2 border border-primary/20 text-primary/50 uppercase tracking-widest text-xs hover:text-primary/80 hover:border-primary/40 transition-colors"
+          >
+            Watch the AI Play
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -366,11 +384,17 @@ function TouchDpad({ onMove, onRest, compact = false }: {
 function GameView({
   state,
   onMove,
-  onRest
+  onRest,
+  isObserving = false,
+  onCycleObserved,
+  onStopObserving,
 }: {
   state: GameStateSnapshot;
   onMove: (dx: number, dy: number) => void;
   onRest: () => void;
+  isObserving?: boolean;
+  onCycleObserved?: () => void;
+  onStopObserving?: () => void;
 }) {
   const logRef = useRef<HTMLDivElement>(null);
   const mapInnerRef = useRef<HTMLDivElement>(null);
@@ -388,6 +412,17 @@ function GameView({
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (isObserving) {
+        if (e.key === 'n' || e.key === 'N' || e.key === 'Tab') {
+          e.preventDefault();
+          onCycleObserved?.();
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          onStopObserving?.();
+        }
+        return;
+      }
+
       if (e.key === '.' || e.key === ' ') {
         e.preventDefault();
         onRest();
@@ -411,7 +446,7 @@ function GameView({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onMove, onRest]);
+  }, [onMove, onRest, isObserving, onCycleObserved, onStopObserving]);
 
   useEffect(() => {
     if (logRef.current) {
@@ -503,33 +538,55 @@ function GameView({
         <div className="relative z-10 flex flex-col h-full">
 
           <header className="border-b border-primary/50 px-2 py-1 flex items-center gap-3 font-bold shrink-0">
-            <span className="text-player text-xs" data-testid="text-player-name">{state.player.name}</span>
-            <span className={`text-xs ${state.player.hp <= 5 ? 'text-enemy animate-pulse' : 'text-primary'}`} data-testid="text-player-hp">
-              HP:{state.player.hp}/{state.player.maxHp}
-            </span>
-            {(state.player.buffs?.length ?? 0) > 0 && (
-              <span className="flex gap-1 text-xs" data-testid="text-buffs">
-                {state.player.buffs!.map((b, i) => (
-                  <span key={i} className={`border border-current/30 px-0.5 ${b.type === 'armor' ? 'text-secondary' : 'text-item'}`}>
-                    {b.source}({b.turnsLeft})
+            {isObserving ? (
+              <>
+                <span className="text-xs text-primary/40 uppercase tracking-widest">Observing</span>
+                <span className="text-secondary text-xs font-bold" data-testid="text-observed-name">{state.observedName || state.player.name}</span>
+                <span className={`text-xs ${state.player.hp <= 5 ? 'text-enemy animate-pulse' : 'text-primary'}`} data-testid="text-player-hp">
+                  HP:{state.player.hp}/{state.player.maxHp}
+                </span>
+                <span className="text-xs text-primary/40">D{state.depth}</span>
+                {state.observedCount && state.observedCount > 1 && (
+                  <span className="text-xs text-primary/30">{(state.observedIdx ?? 0) + 1}/{state.observedCount}</span>
+                )}
+              </>
+            ) : (
+              <>
+                <span className="text-player text-xs" data-testid="text-player-name">{state.player.name}</span>
+                <span className={`text-xs ${state.player.hp <= 5 ? 'text-enemy animate-pulse' : 'text-primary'}`} data-testid="text-player-hp">
+                  HP:{state.player.hp}/{state.player.maxHp}
+                </span>
+                {(state.player.buffs?.length ?? 0) > 0 && (
+                  <span className="flex gap-1 text-xs" data-testid="text-buffs">
+                    {state.player.buffs!.map((b, i) => (
+                      <span key={i} className={`border border-current/30 px-0.5 ${b.type === 'armor' ? 'text-secondary' : 'text-item'}`}>
+                        {b.source}({b.turnsLeft})
+                      </span>
+                    ))}
                   </span>
-                ))}
-              </span>
-            )}
-            {state.player.isResting && (
-              <span className="text-xs text-primary/50 animate-pulse" data-testid="text-resting">Zzz</span>
-            )}
-            {state.riftWarning && (
-              <span className="text-purple-400 text-xs animate-pulse font-bold uppercase tracking-wider" data-testid="rift-warning-banner">⚠ Gate forming</span>
-            )}
-            {state.riftActive && (
-              <span className="text-purple-300 text-xs font-bold uppercase tracking-wider animate-pulse" data-testid="rift-active-banner">
-                ✦ Rift{state.riftTurnsLeft !== undefined ? ` [${state.riftTurnsLeft}t]` : ''}
-              </span>
+                )}
+                {state.player.isResting && (
+                  <span className="text-xs text-primary/50 animate-pulse" data-testid="text-resting">Zzz</span>
+                )}
+                {state.riftWarning && (
+                  <span className="text-purple-400 text-xs animate-pulse font-bold uppercase tracking-wider" data-testid="rift-warning-banner">⚠ Gate forming</span>
+                )}
+                {state.riftActive && (
+                  <span className="text-purple-300 text-xs font-bold uppercase tracking-wider animate-pulse" data-testid="rift-active-banner">
+                    ✦ Rift{state.riftTurnsLeft !== undefined ? ` [${state.riftTurnsLeft}t]` : ''}
+                  </span>
+                )}
+              </>
             )}
             <div className="ml-auto flex items-center gap-2 text-xs text-primary/50" data-testid="text-depth-info">
-              <span>D{state.depth}</span>
-              <span>{state.onlineCount}♟</span>
+              {isObserving ? (
+                <>
+                  <button data-testid="button-next-ai" onClick={onCycleObserved} className="border border-primary/20 px-1.5 py-0.5 hover:border-primary/50 hover:text-primary transition-colors uppercase tracking-wider">N: Next AI</button>
+                  <button data-testid="button-stop-observe" onClick={onStopObserving} className="border border-primary/20 px-1.5 py-0.5 hover:border-primary/50 hover:text-primary transition-colors uppercase tracking-wider">Esc: Leave</button>
+                </>
+              ) : (
+                <><span>D{state.depth}</span><span>{state.onlineCount}♟</span></>
+              )}
               <AudioHealthDot />
               <MuteButton />
             </div>
@@ -538,7 +595,14 @@ function GameView({
           <div className="flex-1 flex min-h-0 overflow-hidden">
 
             <div className="shrink-0 flex items-center justify-center border-r border-primary/20 px-2">
-              <TouchDpad compact onMove={onMove} onRest={onRest} />
+              {isObserving ? (
+                <div className="flex flex-col gap-2 text-center">
+                  <button data-testid="button-next-ai-mobile" onClick={onCycleObserved} className="border border-primary/30 px-2 py-1 text-primary/60 text-xs uppercase tracking-wider hover:text-primary hover:border-primary/60 transition-colors">Next AI</button>
+                  <button data-testid="button-stop-observe-mobile" onClick={onStopObserving} className="border border-primary/20 px-2 py-1 text-primary/40 text-xs uppercase tracking-wider hover:text-primary/70 hover:border-primary/40 transition-colors">Leave</button>
+                </div>
+              ) : (
+                <TouchDpad compact onMove={onMove} onRest={onRest} />
+              )}
             </div>
 
             <div
@@ -642,25 +706,48 @@ function GameView({
 
         <header className="border-b border-primary/50 pb-2 flex justify-between items-end font-bold uppercase tracking-wider shrink-0">
           <div className="flex gap-4 items-end">
-            <span className="text-player" data-testid="text-player-name">{state.player.name}</span>
-            <span className={state.player.hp <= 5 ? "text-enemy animate-pulse" : "text-primary"} data-testid="text-player-hp">
-              HP: {state.player.hp}/{state.player.maxHp}
-            </span>
-            {(state.player.buffs?.length ?? 0) > 0 && (
-              <span className="text-xs text-item" data-testid="text-buffs">
-                {state.player.buffs!.map((b, i) => (
-                  <span key={i} className={b.type === 'armor' ? 'text-secondary' : 'text-item'}>
-                    {b.source}({b.turnsLeft}){i < state.player.buffs!.length - 1 ? ' ' : ''}
+            {isObserving ? (
+              <>
+                <span className="text-xs text-primary/40 tracking-widest">Observing</span>
+                <span className="text-secondary font-bold" data-testid="text-observed-name">{state.observedName || state.player.name}</span>
+                <span className={state.player.hp <= 5 ? "text-enemy animate-pulse" : "text-primary"} data-testid="text-player-hp">
+                  HP: {state.player.hp}/{state.player.maxHp}
+                </span>
+                <span className="text-primary/50 text-sm">Depth: {state.depth}</span>
+                {state.observedCount && state.observedCount > 1 && (
+                  <span className="text-primary/30 text-xs">AI {(state.observedIdx ?? 0) + 1}/{state.observedCount}</span>
+                )}
+              </>
+            ) : (
+              <>
+                <span className="text-player" data-testid="text-player-name">{state.player.name}</span>
+                <span className={state.player.hp <= 5 ? "text-enemy animate-pulse" : "text-primary"} data-testid="text-player-hp">
+                  HP: {state.player.hp}/{state.player.maxHp}
+                </span>
+                {(state.player.buffs?.length ?? 0) > 0 && (
+                  <span className="text-xs text-item" data-testid="text-buffs">
+                    {state.player.buffs!.map((b, i) => (
+                      <span key={i} className={b.type === 'armor' ? 'text-secondary' : 'text-item'}>
+                        {b.source}({b.turnsLeft}){i < state.player.buffs!.length - 1 ? ' ' : ''}
+                      </span>
+                    ))}
                   </span>
-                ))}
-              </span>
-            )}
-            {state.player.isResting && (
-              <span className="text-xs text-primary/60 animate-pulse" data-testid="text-resting">Resting...</span>
+                )}
+                {state.player.isResting && (
+                  <span className="text-xs text-primary/60 animate-pulse" data-testid="text-resting">Resting...</span>
+                )}
+              </>
             )}
           </div>
           <div className="text-primary/50 text-sm flex items-center gap-3" data-testid="text-depth-info">
-            <span>Depth: {state.depth} | Online: {state.onlineCount}</span>
+            {isObserving ? (
+              <>
+                <button data-testid="button-next-ai" onClick={onCycleObserved} className="border border-primary/20 px-2 py-0.5 text-xs hover:border-primary/50 hover:text-primary transition-colors uppercase tracking-wider">N — Next AI</button>
+                <button data-testid="button-stop-observe" onClick={onStopObserving} className="border border-primary/20 px-2 py-0.5 text-xs hover:border-primary/50 hover:text-primary transition-colors uppercase tracking-wider">Esc — Leave</button>
+              </>
+            ) : (
+              <span>Depth: {state.depth} | Online: {state.onlineCount}</span>
+            )}
             <AudioHealthDot />
             <MuteButton />
           </div>
@@ -756,16 +843,34 @@ function GameView({
 }
 
 export default function Home() {
-  const { gameState, connected, connect, sendMove, sendRest, sendRespawn } = useGameWebSocket();
-  const [joined, setJoined] = useState(false);
+  const { gameState, connected, connect, observe, disconnect, sendMove, sendRest, sendRespawn, cycleObserved } = useGameWebSocket();
+  const [appMode, setAppMode] = useState<'join' | 'playing' | 'observing'>('join');
 
   const handleJoin = useCallback((name: string) => {
     initAudio();
     const savedMute = localStorage.getItem('dungeon-muted') === 'true';
     if (savedMute) setMuted(true);
     connect(name);
-    setJoined(true);
+    setAppMode('playing');
   }, [connect]);
+
+  const handleObserve = useCallback(() => {
+    initAudio();
+    const savedMute = localStorage.getItem('dungeon-muted') === 'true';
+    if (savedMute) setMuted(true);
+    observe();
+    setAppMode('observing');
+  }, [observe]);
+
+  const handleObserveFromDeath = useCallback(() => {
+    disconnect();
+    handleObserve();
+  }, [disconnect, handleObserve]);
+
+  const handleStopObserving = useCallback(() => {
+    disconnect();
+    setAppMode('join');
+  }, [disconnect]);
 
   const handleMove = useCallback((dx: number, dy: number) => {
     sendMove(dx, dy);
@@ -775,8 +880,8 @@ export default function Home() {
     sendRest();
   }, [sendRest]);
 
-  if (!joined) {
-    return <JoinScreen onJoin={handleJoin} />;
+  if (appMode === 'join') {
+    return <JoinScreen onJoin={handleJoin} onObserve={handleObserve} />;
   }
 
   if (!gameState) {
@@ -790,6 +895,22 @@ export default function Home() {
     );
   }
 
+  if (appMode === 'observing') {
+    return (
+      <>
+        <GameView
+          state={gameState}
+          onMove={() => {}}
+          onRest={() => {}}
+          isObserving
+          onCycleObserved={cycleObserved}
+          onStopObserving={handleStopObserving}
+        />
+        <AudioController state={gameState} />
+      </>
+    );
+  }
+
   return (
     <>
       {gameState.dead && gameState.stats ? (
@@ -798,6 +919,7 @@ export default function Home() {
           playerName={gameState.player.name}
           depth={gameState.depth}
           onRespawn={sendRespawn}
+          onObserve={handleObserveFromDeath}
         />
       ) : (
         <GameView

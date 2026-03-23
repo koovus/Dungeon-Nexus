@@ -6,9 +6,16 @@ export function useGameWebSocket() {
   const [gameState, setGameState] = useState<GameStateSnapshot | null>(null);
   const [connected, setConnected] = useState(false);
   const reconnectTimeout = useRef<ReturnType<typeof setTimeout>>();
+  const modeRef = useRef<'idle' | 'playing' | 'observing'>('idle');
+  const nameRef = useRef<string>('');
 
-  const connect = useCallback((name: string) => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) return;
+  const openConnection = useCallback((mode: 'playing' | 'observing', name?: string) => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.close();
+    }
+
+    modeRef.current = mode;
+    if (name) nameRef.current = name;
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
@@ -16,7 +23,11 @@ export function useGameWebSocket() {
 
     ws.onopen = () => {
       setConnected(true);
-      ws.send(JSON.stringify({ type: 'join', name }));
+      if (mode === 'playing') {
+        ws.send(JSON.stringify({ type: 'join', name: nameRef.current }));
+      } else {
+        ws.send(JSON.stringify({ type: 'observe' }));
+      }
     };
 
     ws.onmessage = (event) => {
@@ -31,14 +42,33 @@ export function useGameWebSocket() {
     ws.onclose = () => {
       setConnected(false);
       wsRef.current = null;
-      reconnectTimeout.current = setTimeout(() => {
-        if (name) connect(name);
-      }, 2000);
+      if (modeRef.current !== 'idle') {
+        reconnectTimeout.current = setTimeout(() => {
+          openConnection(modeRef.current as 'playing' | 'observing', nameRef.current);
+        }, 2000);
+      }
     };
 
     ws.onerror = () => {
       ws.close();
     };
+  }, []);
+
+  const connect = useCallback((name: string) => {
+    openConnection('playing', name);
+  }, [openConnection]);
+
+  const observe = useCallback(() => {
+    openConnection('observing');
+  }, [openConnection]);
+
+  const disconnect = useCallback(() => {
+    modeRef.current = 'idle';
+    if (reconnectTimeout.current) clearTimeout(reconnectTimeout.current);
+    wsRef.current?.close();
+    wsRef.current = null;
+    setGameState(null);
+    setConnected(false);
   }, []);
 
   const sendMove = useCallback((dx: number, dy: number) => {
@@ -59,12 +89,19 @@ export function useGameWebSocket() {
     }
   }, []);
 
+  const cycleObserved = useCallback(() => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: 'observe_cycle' }));
+    }
+  }, []);
+
   useEffect(() => {
     return () => {
+      modeRef.current = 'idle';
       if (reconnectTimeout.current) clearTimeout(reconnectTimeout.current);
       wsRef.current?.close();
     };
   }, []);
 
-  return { gameState, connected, connect, sendMove, sendRest, sendRespawn };
+  return { gameState, connected, connect, observe, disconnect, sendMove, sendRest, sendRespawn, cycleObserved };
 }
