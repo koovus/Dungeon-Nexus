@@ -10,7 +10,7 @@ const DIRS: [number, number][] = [
   [0, -1], [0, 1], [-1, 0], [1, 0]
 ];
 
-function bfsPath(from: Position, to: Position, level: DungeonLevel, stopAdjacent = false, maxSteps = 200): Position[] | null {
+function bfsPath(from: Position, to: Position, level: DungeonLevel, stopAdjacent = false, maxSteps = 4000): Position[] | null {
   if (from.x === to.x && from.y === to.y) return [];
   if (stopAdjacent && Math.abs(from.x - to.x) <= 1 && Math.abs(from.y - to.y) <= 1) return [to];
 
@@ -207,7 +207,8 @@ export class AIBot {
       } else {
         this.path = [];
       }
-    } else if (decision.goal === 'idle') {
+    } else {
+      // Path is empty (BFS failed or no target) — keep moving so the AI never freezes
       this.randomStep(player.pos, level);
     }
 
