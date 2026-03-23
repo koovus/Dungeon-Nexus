@@ -52,7 +52,7 @@ function JoinScreen({ onJoin, onObserve }: { onJoin: (name: string) => void; onO
 
         <div className="space-y-4 text-sm text-primary/70 mb-6">
           <p className="text-center">A multiplayer roguelike dungeon crawler</p>
-          <p className="text-center text-xs text-primary/40">v0.5.0</p>
+          <p className="text-center text-xs text-primary/40">v0.6.0</p>
           <div className="grid grid-cols-2 gap-2 text-xs border border-primary/20 p-3">
             <div><span className="text-player font-bold">@</span> You</div>
             <div><span className="text-secondary font-bold">@</span> Other Players</div>
