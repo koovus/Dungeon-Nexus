@@ -215,6 +215,15 @@ export class AIBot {
   }
 
   decide(player: { pos: Position; hp: number; maxHp: number; explored: boolean[][] }, level: DungeonLevel, visible: boolean[][]) {
+    const inRift = this.world.isInRift(this.id);
+
+    // Always seek the stairs first — descending is the primary goal
+    if (!inRift) {
+      const stairs = level.entities.find(e => e.type === 'stairs_down');
+      if (stairs) return { target: stairs.pos, goal: 'descend' };
+    }
+
+    // No stairs found yet — explore to locate them, picking up items and fighting along the way
     if (player.hp < player.maxHp * 0.3) {
       const potion = this.findClosestVisible(level, visible, player.pos, e =>
         e.type === 'item' && (e.name === 'Health Potion' || e.name === 'Healing Herb' || e.name === 'Food')
@@ -236,12 +245,6 @@ export class AIBot {
 
     const unexplored = bfsToUnexplored(player.pos, player.explored, level);
     if (unexplored) return { target: unexplored, goal: 'explore' };
-
-    const inRift = this.world.isInRift(this.id);
-    if (!inRift) {
-      const stairs = level.entities.find(e => e.type === 'stairs_down');
-      if (stairs) return { target: stairs.pos, goal: 'descend' };
-    }
 
     return { target: null, goal: 'idle' };
   }
