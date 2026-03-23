@@ -18,6 +18,7 @@ import {
   startAmbientSounds,
   stopAmbientSounds,
   stopAll,
+  getAudioDiagnostics,
 } from '@/lib/audioEngine';
 
 function JoinScreen({ onJoin }: { onJoin: (name: string) => void }) {
@@ -179,6 +180,41 @@ function MuteButton() {
       {mute ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
       <span className="hidden sm:inline">{mute ? 'Muted' : 'Sound'}</span>
     </button>
+  );
+}
+
+function AudioHealthDot() {
+  const [health, setHealth] = useState<{ healthy: boolean; state: string; resumeAttempts: number }>({
+    healthy: true,
+    state: 'not-created',
+    resumeAttempts: 0,
+  });
+
+  useEffect(() => {
+    const iv = setInterval(() => {
+      setHealth(getAudioDiagnostics());
+    }, 2000);
+    return () => clearInterval(iv);
+  }, []);
+
+  const color = health.state === 'not-created'
+    ? 'bg-primary/20'
+    : health.healthy && health.state === 'running'
+      ? 'bg-green-500'
+      : 'bg-yellow-500 animate-pulse';
+
+  const label = health.state === 'not-created'
+    ? 'Audio not started'
+    : health.state === 'running'
+      ? `Audio OK${health.resumeAttempts > 0 ? ` (healed ${health.resumeAttempts}×)` : ''}`
+      : `Audio ${health.state} — healing…`;
+
+  return (
+    <span
+      data-testid="status-audio-health"
+      title={label}
+      className={`inline-block w-2 h-2 rounded-full ${color} cursor-default`}
+    />
   );
 }
 
@@ -494,6 +530,7 @@ function GameView({
             <div className="ml-auto flex items-center gap-2 text-xs text-primary/50" data-testid="text-depth-info">
               <span>D{state.depth}</span>
               <span>{state.onlineCount}♟</span>
+              <AudioHealthDot />
               <MuteButton />
             </div>
           </header>
@@ -624,6 +661,7 @@ function GameView({
           </div>
           <div className="text-primary/50 text-sm flex items-center gap-3" data-testid="text-depth-info">
             <span>Depth: {state.depth} | Online: {state.onlineCount}</span>
+            <AudioHealthDot />
             <MuteButton />
           </div>
         </header>

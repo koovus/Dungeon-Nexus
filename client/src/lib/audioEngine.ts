@@ -13,6 +13,11 @@ let currentMusicMode: 'none' | 'dungeon' | 'rift' = 'none';
 let muted = false;
 let initialized = false;
 
+let watchdogInterval: ReturnType<typeof setInterval> | null = null;
+let resumeAttempts = 0;
+let lastResumeAttempt = 0;
+let audioHealthy = true;
+
 function getCtx(): AudioContext {
   if (!ctx) {
     ctx = new AudioContext();
@@ -34,6 +39,45 @@ function getCtx(): AudioContext {
   return ctx;
 }
 
+function ensureRunning(): void {
+  if (!ctx) return;
+  if (ctx.state === 'suspended') {
+    audioHealthy = false;
+    const now = Date.now();
+    if (now - lastResumeAttempt > 200) {
+      lastResumeAttempt = now;
+      resumeAttempts++;
+      ctx.resume().then(() => {
+        audioHealthy = true;
+      }).catch(() => {});
+    }
+  } else if (ctx.state === 'running') {
+    audioHealthy = true;
+  }
+}
+
+function startWatchdog(): void {
+  if (watchdogInterval) return;
+  watchdogInterval = setInterval(() => {
+    if (!ctx) return;
+    if (ctx.state === 'suspended') {
+      audioHealthy = false;
+      ctx.resume().then(() => {
+        audioHealthy = true;
+      }).catch(() => {});
+    } else if (ctx.state === 'running') {
+      audioHealthy = true;
+    } else if (ctx.state === 'closed') {
+      audioHealthy = false;
+      ctx = null;
+      masterGain = null;
+      musicGain = null;
+      sfxGain = null;
+      ambientGain = null;
+    }
+  }, 2000);
+}
+
 export function initAudio(): void {
   if (initialized) return;
   const c = getCtx();
@@ -46,11 +90,15 @@ export function initAudio(): void {
   }
   document.addEventListener('click', resumeCtx);
   document.addEventListener('keydown', resumeCtx);
+  document.addEventListener('pointerdown', resumeCtx);
+  startWatchdog();
 }
 
 function resumeCtx(): void {
   if (ctx && ctx.state === 'suspended') {
-    ctx.resume();
+    ctx.resume().then(() => {
+      audioHealthy = true;
+    }).catch(() => {});
   }
 }
 
@@ -65,6 +113,20 @@ export function setMuted(m: boolean): void {
 
 export function isMuted(): boolean {
   return muted;
+}
+
+export function getAudioDiagnostics(): {
+  state: string;
+  healthy: boolean;
+  resumeAttempts: number;
+  initialized: boolean;
+} {
+  return {
+    state: ctx ? ctx.state : 'not-created',
+    healthy: audioHealthy,
+    resumeAttempts,
+    initialized,
+  };
 }
 
 function clearMusicNodes(fadeTime = 0): void {
@@ -124,6 +186,7 @@ function getScaleNote(root: number, degree: number): number {
 export function playDungeonMusic(): void {
   if (currentMusicMode === 'dungeon') return;
   if (!initialized) return;
+  ensureRunning();
 
   clearMusicNodes(0);
 
@@ -300,6 +363,7 @@ export function playDungeonMusic(): void {
 export function playRiftMusic(): void {
   if (currentMusicMode === 'rift') return;
   if (!initialized) return;
+  ensureRunning();
 
   clearMusicNodes(0.1);
 
@@ -447,6 +511,7 @@ export function fadeOutMusic(): void {
 
 export function playMetalClang(): void {
   if (!initialized) return;
+  ensureRunning();
   const c = getCtx();
   const now = c.currentTime;
 
@@ -483,6 +548,7 @@ export function playMetalClang(): void {
 
 export function playItemPickup(): void {
   if (!initialized) return;
+  ensureRunning();
   const c = getCtx();
   const now = c.currentTime;
 
@@ -503,6 +569,7 @@ export function playItemPickup(): void {
 
 export function playMonsterGrowl(): void {
   if (!initialized) return;
+  ensureRunning();
   const c = getCtx();
   const now = c.currentTime;
 
@@ -650,6 +717,7 @@ export function startAmbientSounds(): void {
 
 export function playBuffActivate(): void {
   if (!initialized) return;
+  ensureRunning();
   const c = getCtx();
   const now = c.currentTime;
 
@@ -695,6 +763,7 @@ export function playBuffActivate(): void {
 
 export function playBuffExpire(): void {
   if (!initialized) return;
+  ensureRunning();
   const c = getCtx();
   const now = c.currentTime;
 
