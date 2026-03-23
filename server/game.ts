@@ -54,6 +54,7 @@ export interface PlayerState {
   buffs: ActiveBuff[];
   restTurns: number;
   isResting: boolean;
+  allTimeDeepestDepth: number;
 }
 
 export interface EnemyDef {
@@ -379,6 +380,7 @@ export class GameWorld {
       buffs: [],
       restTurns: 0,
       isResting: false,
+      allTimeDeepestDepth: 1,
       stats: {
         kills: 0,
         damageDealt: 0,
@@ -729,6 +731,9 @@ export class GameWorld {
         this.playerDepths.set(id, newDepth);
         if (newDepth > player.stats.deepestDepth) {
           player.stats.deepestDepth = newDepth;
+        }
+        if (newDepth > player.allTimeDeepestDepth) {
+          player.allTimeDeepestDepth = newDepth;
         }
         const newLevel = this.getOrCreatePlayerLevel(id, newDepth);
         player.pos = newLevel.getRandomEmptyPos();
@@ -1219,7 +1224,7 @@ export class GameWorld {
     return Array.from(this.players.values())
       .map(p => ({
         name: p.name,
-        depth: p.stats.deepestDepth,
+        depth: p.allTimeDeepestDepth,
         kills: p.stats.kills,
         alive: !p.dead
       }))
