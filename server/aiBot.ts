@@ -218,32 +218,42 @@ export class AIBot {
   decide(player: { pos: Position; hp: number; maxHp: number; explored: boolean[][] }, level: DungeonLevel, visible: boolean[][]) {
     const inRift = this.world.isInRift(this.id);
 
-    // Always seek the stairs first — descending is the primary goal
-    if (!inRift) {
-      const stairs = level.entities.find(e => e.type === 'stairs_down');
-      if (stairs) return { target: stairs.pos, goal: 'descend' };
-    }
-
-    // No stairs found yet — explore to locate them, picking up items and fighting along the way
-    if (player.hp < player.maxHp * 0.3) {
+    // 1. Critical healing — grab the nearest healing item if HP is dangerously low
+    if (player.hp < player.maxHp * 0.4) {
       const potion = this.findClosestVisible(level, visible, player.pos, e =>
         e.type === 'item' && (e.name === 'Health Potion' || e.name === 'Healing Herb' || e.name === 'Food')
       );
       if (potion) return { target: potion, goal: 'heal' };
     }
 
+    // 2. Fight any adjacent enemy — kills grant +2 max HP, always worth it
     const adjacentEnemy = this.findClosestVisible(level, visible, player.pos, e =>
       e.type === 'enemy' && Math.abs(e.pos.x - player.pos.x) <= 1 && Math.abs(e.pos.y - player.pos.y) <= 1
     );
-    if (adjacentEnemy && Math.random() < 0.4) {
-      return { target: adjacentEnemy, goal: 'fight' };
+    if (adjacentEnemy) return { target: adjacentEnemy, goal: 'fight' };
+
+    // 3. Opportunistic healing — pick up any healing item in sight when not at full HP
+    if (player.hp < player.maxHp) {
+      const nearbyHeal = this.findClosestVisible(level, visible, player.pos, e =>
+        e.type === 'item' && (e.name === 'Health Potion' || e.name === 'Healing Herb' || e.name === 'Food')
+        && Math.abs(e.pos.x - player.pos.x) + Math.abs(e.pos.y - player.pos.y) <= 6
+      );
+      if (nearbyHeal) return { target: nearbyHeal, goal: 'heal' };
     }
 
-    const item = this.findClosestVisible(level, visible, player.pos, e =>
-      e.type === 'item' && Math.abs(e.pos.x - player.pos.x) + Math.abs(e.pos.y - player.pos.y) <= 5
-    );
-    if (item) return { target: item, goal: 'loot' };
+    // 4. Seek stairs — primary depth-descending goal
+    if (!inRift) {
+      const stairs = level.entities.find(e => e.type === 'stairs_down');
+      if (stairs) return { target: stairs.pos, goal: 'descend' };
+    }
 
+    // 5. Grab any item nearby while exploring (equipment buffs, extra gold, etc.)
+    const nearbyItem = this.findClosestVisible(level, visible, player.pos, e =>
+      e.type === 'item' && Math.abs(e.pos.x - player.pos.x) + Math.abs(e.pos.y - player.pos.y) <= 3
+    );
+    if (nearbyItem) return { target: nearbyItem, goal: 'loot' };
+
+    // 6. Explore to find stairs and items
     const unexplored = bfsToUnexplored(player.pos, player.explored, level);
     if (unexplored) return { target: unexplored, goal: 'explore' };
 

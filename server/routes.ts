@@ -109,6 +109,11 @@ export async function registerRoutes(
     }
   }, 800);
 
+  function updateBotSpeeds() {
+    const speed = observers.size > 0 ? Math.round(AI_TICK_SPEED / 3) : AI_TICK_SPEED;
+    for (const bot of aiBots) bot.setSpeed(speed);
+  }
+
   wss.on('connection', (ws) => {
     const connId = `p_${nextId++}`;
     clients.set(connId, ws);
@@ -127,6 +132,7 @@ export async function registerRoutes(
 
           case 'observe': {
             observers.set(connId, { ws, targetIdx: 0 });
+            updateBotSpeeds();
             sendObserverState(connId);
             break;
           }
@@ -177,6 +183,7 @@ export async function registerRoutes(
     ws.on('close', () => {
       if (observers.has(connId)) {
         observers.delete(connId);
+        updateBotSpeeds();
       } else {
         world.removePlayer(connId);
       }
@@ -186,6 +193,7 @@ export async function registerRoutes(
     ws.on('error', () => {
       if (observers.has(connId)) {
         observers.delete(connId);
+        updateBotSpeeds();
       } else {
         world.removePlayer(connId);
       }
