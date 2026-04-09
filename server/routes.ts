@@ -174,6 +174,11 @@ export async function registerRoutes(
             sendState(connId);
             break;
           }
+
+          case 'ping': {
+            // Keepalive — no-op, just prevents idle proxy timeouts
+            break;
+          }
         }
       } catch (err) {
         log(`WebSocket error: ${err}`, "game");

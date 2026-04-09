@@ -28,6 +28,16 @@ export function useGameWebSocket() {
       } else {
         ws.send(JSON.stringify({ type: 'observe' }));
       }
+      // Heartbeat: keep the connection alive during idle periods (e.g. resting)
+      // so the proxy never silently drops the socket and triggers an accidental reconnect
+      const heartbeat = setInterval(() => {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: 'ping' }));
+        } else {
+          clearInterval(heartbeat);
+        }
+      }, 10_000);
+      ws.addEventListener('close', () => clearInterval(heartbeat));
     };
 
     ws.onmessage = (event) => {
