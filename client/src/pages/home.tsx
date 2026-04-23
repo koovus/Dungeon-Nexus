@@ -100,12 +100,13 @@ function JoinScreen({ onJoin, onObserve }: { onJoin: (name: string) => void; onO
   );
 }
 
-function DeathScreen({ stats, playerName, depth, onRespawn, onObserve }: {
+function DeathScreen({ stats, playerName, depth, onRespawn, onObserve, onExit }: {
   stats: PlayerStatsInfo;
   playerName: string;
   depth: number;
   onRespawn: () => void;
   onObserve: () => void;
+  onExit: () => void;
 }) {
   useEffect(() => {
     // Only respawn on Enter — Space is the "rest" key during gameplay, so reusing it
@@ -113,6 +114,11 @@ function DeathScreen({ stats, playerName, depth, onRespawn, onObserve }: {
     // Also delay accepting input briefly so a held-down rest key can't auto-respawn.
     const mountedAt = Date.now();
     const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        onExit();
+        return;
+      }
       if (Date.now() - mountedAt < 500) return;
       if (e.key === 'Enter') {
         e.preventDefault();
@@ -121,7 +127,7 @@ function DeathScreen({ stats, playerName, depth, onRespawn, onObserve }: {
     };
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
-  }, [onRespawn]);
+  }, [onRespawn, onExit]);
 
   return (
     <div className="h-screen w-full bg-background text-primary crt flex flex-col items-center justify-center crt-flicker font-mono">
@@ -393,6 +399,7 @@ function GameView({
   isObserving = false,
   onCycleObserved,
   onStopObserving,
+  onExit,
 }: {
   state: GameStateSnapshot;
   onMove: (dx: number, dy: number) => void;
@@ -400,6 +407,7 @@ function GameView({
   isObserving?: boolean;
   onCycleObserved?: () => void;
   onStopObserving?: () => void;
+  onExit?: () => void;
 }) {
   const logRef = useRef<HTMLDivElement>(null);
   const mapInnerRef = useRef<HTMLDivElement>(null);
@@ -417,13 +425,17 @@ function GameView({
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        if (isObserving) onStopObserving?.();
+        else onExit?.();
+        return;
+      }
+
       if (isObserving) {
         if (e.key === 'n' || e.key === 'N' || e.key === 'Tab') {
           e.preventDefault();
           onCycleObserved?.();
-        } else if (e.key === 'Escape') {
-          e.preventDefault();
-          onStopObserving?.();
         }
         return;
       }
@@ -451,7 +463,7 @@ function GameView({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onMove, onRest, isObserving, onCycleObserved, onStopObserving]);
+  }, [onMove, onRest, isObserving, onCycleObserved, onStopObserving, onExit]);
 
   useEffect(() => {
     if (logRef.current) {
@@ -877,6 +889,11 @@ export default function Home() {
     setAppMode('join');
   }, [disconnect]);
 
+  const handleExit = useCallback(() => {
+    disconnect();
+    setAppMode('join');
+  }, [disconnect]);
+
   const handleMove = useCallback((dx: number, dy: number) => {
     sendMove(dx, dy);
   }, [sendMove]);
@@ -925,12 +942,14 @@ export default function Home() {
           depth={gameState.depth}
           onRespawn={sendRespawn}
           onObserve={handleObserveFromDeath}
+          onExit={handleExit}
         />
       ) : (
         <GameView
           state={gameState}
           onMove={handleMove}
           onRest={handleRest}
+          onExit={handleExit}
         />
       )}
       <AudioController state={gameState} />
