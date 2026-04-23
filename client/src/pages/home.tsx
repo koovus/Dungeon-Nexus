@@ -108,8 +108,13 @@ function DeathScreen({ stats, playerName, depth, onRespawn, onObserve }: {
   onObserve: () => void;
 }) {
   useEffect(() => {
+    // Only respawn on Enter — Space is the "rest" key during gameplay, so reusing it
+    // here causes accidental respawns when the player dies mid-rest with Space held.
+    // Also delay accepting input briefly so a held-down rest key can't auto-respawn.
+    const mountedAt = Date.now();
     const handleKey = (e: KeyboardEvent) => {
-      if (e.key === 'Enter' || e.key === ' ') {
+      if (Date.now() - mountedAt < 500) return;
+      if (e.key === 'Enter') {
         e.preventDefault();
         onRespawn();
       }
